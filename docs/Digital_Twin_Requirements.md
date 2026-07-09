@@ -202,3 +202,25 @@ These questions will be refined through literature review:
 - How should conflicting learner information be resolved?
 - How should knowledge graphs interact with vector memory?
 - Which AI agents should be allowed to modify the Digital Twin?
+
+## FR-13 Reflection Engine
+
+The Digital Twin shall periodically synthesize higher-level insights from accumulated learner experiences.
+
+---
+
+## FR-14 Memory Importance
+
+Each stored memory shall maintain an importance score to guide retrieval and long-term retention.
+
+---
+
+## FR-15 Memory Metadata
+
+Every memory shall include metadata describing:
+
+- Timestamp
+- Source
+- Importance
+- Semantic embedding
+- Related concepts
