@@ -410,3 +410,301 @@ The architecture will be refined after reviewing literature on:
 - Educational Digital Twins
 
 Future versions will incorporate experimental findings and implementation feedback while preserving traceability through Architecture Decision Records.
+
+> **Version 0.3**
+# Architectural Principles
+
+The EduTwin framework is designed around the concept of a continuously evolving AI Digital Twin rather than a stateless conversational assistant.
+
+The architecture follows six fundamental principles.
+
+## 1. Single Source of Truth
+
+The Digital Twin is the authoritative representation of the learner.
+
+Every AI agent reads from and writes to the same Digital Twin rather than maintaining independent state.
+
+---
+
+## 2. Separation of Responsibilities
+
+Each architectural component has a single well-defined responsibility.
+
+Memory storage, retrieval, reasoning, learner modeling, and recommendation are independent modules that communicate through explicit interfaces.
+
+---
+
+## 3. Continuous Evolution
+
+Every meaningful learner interaction has the potential to update the Digital Twin.
+
+The learner model is therefore continuously refined rather than reconstructed from conversation history.
+
+---
+
+## 4. Explainability
+
+Every recommendation should be traceable to evidence stored inside the Digital Twin.
+
+Recommendations should never appear as unexplained language model outputs.
+
+---
+
+## 5. Modular AI
+
+The language model is treated as a replaceable reasoning engine rather than the central architecture.
+
+The intelligence of EduTwin resides primarily in the Digital Twin.
+
+---
+
+## 6. Research-Driven Design
+
+Every architectural component exists because it addresses a research question identified during the literature review.
+
+## current diagram
+
+                    User
+                      │
+                      ▼
+             AI Agent Layer
+                      │
+        ┌─────────────┼──────────────┐
+        │             │              │
+        ▼             ▼              ▼
+  Study Coach   Career Mentor   Recommendation
+                      │
+                      ▼
+          Retrieval Orchestrator
+                      │
+      ┌───────────────┼────────────────┐
+      │               │                │
+      ▼               ▼                ▼
+ Structured      Memory Store    Knowledge Graph
+ Student Twin      (ChromaDB)      (NetworkX)
+      │               │                │
+      └───────────────┼────────────────┘
+                      ▼
+             Context Builder
+                      │
+                      ▼
+                 Gemini LLM
+                      │
+                      ▼
+             Reflection Engine
+                      │
+                      ▼
+          Digital Twin Updater
+                      │
+                      ▼
+              Updated Student Twin
+
+## Component Responsibilities
+
+# Student Twin
+
+Purpose:
+
+Stores explicit learner state.
+
+Owns:
+
+profile
+knowledge
+skills
+goals
+interests
+preferences
+references to memories
+
+Does NOT:
+
+retrieve memories
+call the LLM
+perform reasoning
+
+# Memory Store
+
+Purpose:
+
+Stores educational experiences.
+
+Owns:
+
+episodic memories
+reflection memories
+embeddings
+metadata
+
+Does NOT:
+
+update learner profile
+reason
+
+# Knowledge Graph
+
+Purpose:
+
+Represents relationships.
+
+Owns:
+
+prerequisites
+concept hierarchy
+career pathways
+topic dependencies
+
+# Retrieval Orchestrator
+
+Purpose:
+
+Coordinates retrieval.
+
+Owns:
+
+query analysis
+retrieval order
+ranking
+aggregation
+
+Does NOT:
+
+generate responses
+
+# Context Builder
+
+Purpose:
+
+Produces one coherent context object.
+
+Input
+
+Student
+
+Memories
+
+Graph
+
+Reflection
+
+Output
+
+Context
+
+
+# Language Model
+
+Purpose
+
+Reasoning only.
+
+No memory.
+
+No learner state.
+
+No persistence.
+
+# Reflection Engine
+
+Purpose
+
+Transforms experiences into insights.
+
+Examples
+
+Completed five AI papers
+
+↓
+
+Strong interest in AI research
+
+# Twin Updater
+
+Purpose
+
+Updates
+
+profile
+skills
+knowledge
+goals
+reflections
+
+after each interaction.
+
+## Repository Mapping
+
+src/
+
+├── twin/
+│   ├── student.py
+│   ├── profile.py
+│   ├── knowledge.py
+│   ├── skills.py
+│   ├── goals.py
+│   ├── preferences.py
+│   ├── reflection.py
+│   └── memory_reference.py
+│
+├── memory/
+│   ├── memory.py
+│   ├── memory_store.py
+│   ├── retriever.py
+│   └── importance.py
+│
+├── graph/
+│   ├── learner_graph.py
+│   └── knowledge_graph.py
+│
+├── retrieval/
+│   ├── retrieval_orchestrator.py
+│   ├── context_builder.py
+│   └── ranking.py
+│
+└── tests/
+
+## Primary Data Flow
+
+Every learner interaction follows the same lifecycle.
+
+User Question
+
+↓
+
+Retrieve Student Twin
+
+↓
+
+Retrieve Memories
+
+↓
+
+Retrieve Knowledge Graph
+
+↓
+
+Build Context
+
+↓
+
+Language Model
+
+↓
+
+Generate Response
+
+↓
+
+Evaluate Interaction
+
+↓
+
+Store Memory
+
+↓
+
+Generate Reflection (if required)
+
+↓
+
+Update Student Twin
