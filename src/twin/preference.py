@@ -48,7 +48,7 @@ class PreferenceOption(BaseModel):
         ge=0.0,
         le=1.0,
         description="Current affinity score assigned by the Digital Twin."
-    )
+    )   
 
 
 class Preference(BaseModel):
@@ -97,6 +97,6 @@ class Preference(BaseModel):
     )
 
     last_updated: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=datetime. now,
         description="Timestamp of the latest belief update."
     )
