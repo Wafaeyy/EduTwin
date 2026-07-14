@@ -79,3 +79,54 @@ Paper: memory stream, retrieval by relevance/recency/importance, reflection, pla
 Video: indexing, retrieval, generation, query rewriting, fusion, decomposition, routing, advanced retrieval methods.
 
 For EduTwin: treat RAG as evidence lookup, not as the whole memory system
+
+
+
+## Timed_stamped notes
+
+
+### 1. Core RAG Pipeline
+
+- **Indexing (0:05:53):** Documents are split into manageable chunks, converted into semantic vectors via embedding models, and saved in a vector store for efficient searching.
+- **Retrieval (0:10:40):** The system performs a **K-nearest neighbor search** in the embedding space to retrieve the most semantically relevant chunks based on a user's question.
+- **Generation (0:15:52):** The retrieved documents are injected as context into an LLM, which then generates a grounded answer based on the provided data.
+
+### 2. Query Translation (Optimizing retrieval inputs)
+
+- **Multi-Query (0:22:14):** We send the question to an LLM to generate multiple differently-worded variations, perform retrieval for each, and take the unique union of documents to improve recall.
+
+
+- **RAG Fusion (0:28:20):** Similar to multi-query, but it applies **Reciprocal Rank Fusion** to intelligently re-rank the aggregated search results before generation.
+
+
+- **Decomposition (0:33:57):** The question is sent to an LLM to break it into sub-questions; we answer the first, add that answer to the context, and use it to help solve the second sub-question, and so on.
+
+
+- **Step Back Prompting (0:40:31):** We ask the LLM to generate a more abstract, high-level question to retrieve broad conceptual context, which is then combined with the specific original question to form the final answer.
+
+
+
+- **HyDE (0:47:24):** The LLM generates a hypothetical answer to the user's question; we use this "fake" document to perform the retrieval, as it is often closer to the target content in the embedding space than the original question.
+
+
+
+### 3. Routing & Construction
+
+- **Routing (0:52:07):** An LLM analyzes the user's question and decides which data source is appropriate—such as a Vector Store, Graph DB, or Web Search—and directs the query accordingly.
+
+
+- **Query Construction (0:59:08):** Using **function calling**, the LLM converts natural language requests into structured metadata filters (e.g., filtering a vector store by date or author) to narrow down search results.
+
+
+### 4. Advanced Indexing
+
+- **Multi-Representation Indexing (1:05:05):** We index small, high-quality summaries or propositions instead of raw chunks, while maintaining a link to the full source document to retrieve the entire text for the final generation.
+
+
+- **RAPTOR (1:11:39):** A hierarchical approach where we cluster similar document chunks and recursively summarize them, creating a tree structure that supports both fine-grained and high-level retrieval.
+
+
+### 5. Adaptive & Agentic RAG
+
+- **CRAG (Corrective RAG) (1:26:32):** We use a grader to verify if retrieved documents are relevant. If they are irrelevant, the system triggers a web search to fetch accurate data.
+- **Adaptive RAG (1:44:09):** A sophisticated **state-machine** flow using *LangGraph*. The system uses an LLM as an orchestrator to route the question, grade document relevance, check for hallucinations, and loop back to retry or transform the query if the verification steps fail.
