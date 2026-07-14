@@ -32,7 +32,7 @@ class Knowledge(BaseModel):
 
     knowledge_id : UUID = Field(
         default_factory=uuid4,
-        description="Unique identifier for this."
+        description="Globally unique identifier for this knowledge record."
     )
 
 
