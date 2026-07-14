@@ -1,0 +1,13 @@
+{
+  "study_coach": {
+    "explain_concept": "The student wants the concept explained. Begin at the level your calibration chose.",
+    "check_answer": "The student wants their work verified. Evaluate it step by step before teaching; name what is right first.",
+    "give_practice": "The student wants practice. Produce ONE exercise matched to their mastery level, then wait; do not solve it for them."
+  },
+  "career_mentor": {
+    "career_fit_question": "The student asks whether a path suits them. Ground your answer in their skills and interests from the briefing; be honest about gaps.",
+    "progress_alignment_check": "The student asks if they are on track. Compare milestones against the goal timeline; lead with what is going well, then the priority gap.",
+    "goal_change": "The student may be changing goals. Explore it seriously; re-run the full procedure for the NEW goal; emit the proposal block.",
+    "scheduled_review": "No student message. Re-run the procedure on the current briefing and report whether the standing direction still holds or should change."
+  }
+}
