@@ -1,102 +1,84 @@
 """
-preference.py
+preferences.py
 
-Defines contextual learner preferences for the EduTwin Digital Twin.
+Represents contextual learner preferences using affinity belief vectors.
 
-Unlike traditional systems that store deterministic preferences,
-EduTwin models preferences as contextual affinity beliefs.
+Each preference consists of:
 
-The Digital Twin stores only the current belief state.
+- Dimension
+- Context
+- Affinity Vector
 
-Preference updates are performed exclusively by the Twin Updater.
+Affinity values range from 0.0 to 1.0 and represent the Digital Twin's
+current belief about how strongly the learner prefers each option.
 
-Research Question:
-Can contextual affinity beliefs better represent learner preferences
-than deterministic preference values?
+The Twin stores only the current belief state.
 
-Author: EduTwin Research Team
+Historical evidence is stored by the Memory System.
+
+Only the Twin Updater may modify these beliefs.
 """
 
-from datetime import datetime
 from uuid import UUID, uuid4
+from datetime import datetime
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-class PreferenceOption(BaseModel):
-    """
-    Represents one possible option within a preference dimension.
-
-    Example:
-
-    value = "Detailed"
-
-    affinity = 0.91
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    value: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-        description="Possible value for this preference."
-    )
-
-    affinity: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Current affinity score assigned by the Digital Twin."
-    )   
+from twin.enums import (
+    PreferenceDimension,
+    PREFERENCE_OPTION_ENUMS,
+    LearningContext
+)
 
 
 class Preference(BaseModel):
-    """
-    Represents a contextual preference belief.
-
-    Example
-
-    Dimension:
-        Explanation Depth
-
-    Context:
-        Programming
-
-    Affinities:
-        Short      0.18
-        Medium     0.61
-        Detailed   0.92
-    """
 
     model_config = ConfigDict(extra="forbid")
 
     preference_id: UUID = Field(
-        default_factory=uuid4,
-        description="Unique identifier for this preference."
+        default_factory=uuid4
     )
 
-    dimension: str = Field(
-        ...,
-        min_length=2,
-        max_length=100,
-        description="Preference dimension (e.g. Explanation Depth)."
+    dimension: PreferenceDimension = Field(
+        description="Preference dimension."
     )
 
-    context: str = Field(
-        ...,
-        min_length=2,
-        max_length=100,
-        description="Context in which this preference applies."
+    context: LearningContext = Field(
+        description="Context in which the preference applies."
     )
 
-    options: list[PreferenceOption] = Field(
-        ...,
-        min_items=1,
-        description="Affinity scores for every available option."
+    affinities: dict[str, float] = Field(
+        description="Affinity score for each valid option."
     )
 
     last_updated: datetime = Field(
-        default_factory=datetime. now,
-        description="Timestamp of the latest belief update."
+        default_factory=datetime.now
     )
+
+    @field_validator("affinities")
+    @classmethod
+    def validate_affinities(cls, affinities, info):
+
+        dimension = info.data.get("dimension")
+
+        if dimension is None:
+            return affinities
+
+        enum_cls = PREFERENCE_OPTION_ENUMS[dimension]
+
+        valid_options = {e.value for e in enum_cls}
+
+        invalid = set(affinities.keys()) - valid_options
+
+        if invalid:
+            raise ValueError(
+                f"Invalid options {invalid} for dimension {dimension.value}"
+            )
+
+        for score in affinities.values():
+            if not (0.0 <= score <= 1.0):
+                raise ValueError(
+                    "Affinity scores must be between 0 and 1."
+                )
+
+        return affinities

@@ -29,7 +29,7 @@ class Skill(BaseModel):
     skill_level: float = Field (
         ge= 0.0,
         le = 1.0,
-        description= "Describes the \"canthe user do it?\"  aspect"
+        description= "Describes the \"can the user do it?\"  aspect"
     )
 
     confidence : float = Field (
