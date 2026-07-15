@@ -1,6 +1,18 @@
 
 """
+skill.py
 
+Defines the learner's practical skills within the EduTwin Digital Twin.
+
+A Skill represents the Digital Twin's current belief about the learner's
+ability to perform a specific task or activity.
+
+This model intentionally stores only the current belief state.
+Historical changes are managed by the Memory System.
+
+Research Question:
+Can separating practical skills from conceptual knowledge improve
+educational personalization and learner modeling?
 """
 from pydantic import BaseModel , ConfigDict , Field
 from uuid import UUID , uuid4
@@ -24,6 +36,12 @@ class Skill(BaseModel):
         max_length= 100 ,
         description="Topic name."
 
+    )
+
+    description: str | None = Field(
+    default=None,
+    max_length=500,
+    description="Optional description of the skill."
     )
 
     skill_level: float = Field (

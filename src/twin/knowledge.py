@@ -5,7 +5,7 @@ knowledge.py
 Defines the learner's knowledge state within the EduTwin Digital Twin.
 
 A Knowledge record represents the Digital Twin's current belief
-about the learner's mastery of a specific educational topic.
+about the learner's mastery of a single educational concept.
 
 This model intentionally stores only the current belief state.
 Historical changes are managed by the Memory System.
@@ -36,12 +36,18 @@ class Knowledge(BaseModel):
     )
 
 
-    topic : str = Field (
+    title : str = Field (
         ...,
         min_length=3,
         max_length= 100 ,
         description="Topic name."
 
+    )
+
+    description: str | None = Field(
+    default=None,
+    max_length=500,
+    description="Optional description of the Knowledge concept."
     )
 
     mastery: float = Field (

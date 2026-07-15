@@ -100,3 +100,15 @@ class LearningContext(str, Enum):
     EXAM_PREPARATION = "Exam Preparation"
 
     PROJECT_WORK = "Project Work"
+
+class MemoryType(str, Enum):
+    """
+    Describes the type of interaction represented by the memory.
+    """
+
+    INTERACTION = "interaction"
+    ASSESSMENT = "assessment"
+    PRACTICE = "practice"
+    PREFERENCE = "preference"
+    GOAL = "goal"
+    SYSTEM = "system"

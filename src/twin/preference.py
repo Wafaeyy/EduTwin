@@ -38,7 +38,7 @@ class Preference(BaseModel):
     preference_id: UUID = Field(
         default_factory=uuid4
     )
-
+    
     dimension: PreferenceDimension = Field(
         description="Preference dimension."
     )
