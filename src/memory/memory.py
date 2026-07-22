@@ -55,6 +55,11 @@ class Memory(BaseModel):
         le=1.0,
         description="Relative importance of this memory."
     )
+    
+    archived: bool = Field(
+        default= False,
+        description="bool value if memory is archived or no"
+    )
 
     created_at: datetime = Field(
         default_factory=datetime.now,
