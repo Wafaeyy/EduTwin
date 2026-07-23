@@ -112,3 +112,8 @@ class MemoryType(str, Enum):
     PREFERENCE = "preference"
     GOAL = "goal"
     SYSTEM = "system"
+    
+class EvidenceSource(str, Enum):
+    MEMORY = "memory"
+    TWIN = "twin"
+    GRAPH = "graph"

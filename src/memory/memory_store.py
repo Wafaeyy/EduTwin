@@ -123,6 +123,43 @@ class MemoryStore:
 
         return self.collection.get()
 
+    def search(self,query: str,top_n: int = 50,) -> list[tuple[Memory, float]]:
+        """
+        Perform semantic search over stored memories.
+
+        Args:
+            query: Natural language search query.
+            top_n: Number of candidate memories to retrieve.
+
+        Returns:
+            A list of (Memory, semantic_similarity) tuples ordered by
+            semantic similarity.
+        """
+
+        query_embedding = self._generate_embedding(query)
+
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_n,
+        )
+
+        memories = []
+
+        documents = results["documents"][0]
+        distances = results["distances"][0]
+
+        for document, distance in zip(documents, distances):
+            memory = Memory.model_validate_json(document)
+
+            # Convert Chroma distance into similarity.
+            # (Smaller distance = higher similarity.)
+            similarity = 1.0 / (1.0 + distance)
+
+            memories.append((memory, similarity))
+
+        return memories
+    
+    
     #####################################################################
     # Private Helpers
     #####################################################################
