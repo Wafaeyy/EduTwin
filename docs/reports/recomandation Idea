@@ -1,0 +1,1235 @@
+# Proposed Resource Recommendation Architecture
+
+## The Main Idea
+
+Our Recommendation System should not depend on an LLM randomly searching for resources and then directly recommending whatever it finds.
+
+Instead, we should separate the process into different components with clear responsibilities.
+
+The basic idea is:
+
+```text
+Learner
+   ↓
+Digital Twin
+   ↓
+Understand What This Learner Needs
+   ↓
+Find Possible Resources
+   ↓
+Verify the Resources
+   ↓
+Recommendation Engine (CODE)
+   ↓
+Score and Rank the Resources
+   ↓
+Explain the Recommendation
+   ↓
+Return the Best Resource
+```
+
+The core principle is:
+
+> **The retrieval system finds resources. The verification system checks resources. The Recommendation Engine, implemented as code, selects and ranks the best resource for the learner.**
+
+---
+
+# 1. The Problem We Are Trying to Solve
+
+Suppose a student asks:
+
+> "What should I study today?"
+
+A traditional LLM may:
+
+1. Generate a recommendation.
+2. Search for or invent a resource.
+3. Return a URL.
+4. The URL may be broken.
+5. The title may not match the actual content.
+6. The resource may not match the student's level.
+7. The resource may not match the student's goals.
+8. The resource may not match the student's preferences.
+
+We want to avoid this.
+
+Our system should instead answer:
+
+> "What is the best verified resource for this particular learner, based on their current Digital Twin state?"
+
+---
+
+# 2. The Core Architecture
+
+```text
+                         USER
+                           │
+                           ▼
+                    USER REQUEST
+                           │
+                           ▼
+                    INTENT DETECTION
+                           │
+                           ▼
+                      ORCHESTRATOR
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │ Retrieve Relevant       │
+              │ Digital Twin State      │
+              └────────────┬───────────┘
+                           │
+                           ▼
+                SEARCH REQUIREMENT BUILDER
+                           │
+                           ▼
+                RESOURCE RETRIEVAL SYSTEM
+                           │
+                           ▼
+                     RAW CANDIDATES
+                           │
+                           ▼
+                    VERIFICATION GATE
+                           │
+                 ┌─────────┴─────────┐
+                 │                   │
+                PASS                FAIL
+                 │                   │
+                 ▼                   ▼
+         VERIFIED RESOURCES       DISCARD
+                 │
+                 ▼
+          RECOMMENDATION ENGINE
+                 │
+            CODE-BASED
+                 │
+                 ▼
+           SCORE AND RANK
+                 │
+                 ▼
+            BEST RESOURCE
+                 │
+                 ▼
+          DECISION RECORD
+                 │
+                 ▼
+        EXPLAINABILITY AGENT
+                 │
+                 ▼
+               RESPONSE
+```
+
+---
+
+# 3. The Digital Twin
+
+The Digital Twin describes the learner.
+
+It may contain:
+
+```text
+Knowledge
+Skills
+Weaknesses
+Goals
+Interests
+Learning History
+Learning Preferences
+Recent Activity
+Previously Seen Resources
+Progress
+```
+
+However, the entire Digital Twin should not be sent to every component.
+
+For example, if the student asks:
+
+> "Find me a short video about Linear Algebra."
+
+The system may only need:
+
+```text
+Relevant Topic:
+Linear Algebra
+
+Current Knowledge:
+Beginner
+
+Weakness:
+Linear Algebra
+
+Goal:
+Machine Learning
+
+Preferred Format:
+Video
+
+Preferred Duration:
+Short
+
+Previously Seen Resources:
+Resource A
+Resource B
+```
+
+The system should not unnecessarily send unrelated information.
+
+---
+
+# 4. Step 1 — Building Search Requirements
+
+The system first converts relevant learner information into structured search requirements.
+
+For example:
+
+### Digital Twin Data
+
+```text
+Goal:
+Machine Learning
+
+Weakness:
+Linear Algebra
+
+Level:
+Beginner
+
+Preferred Format:
+Video
+
+Maximum Duration:
+30 minutes
+```
+
+The system converts this into:
+
+```json
+{
+  "topic": "linear algebra",
+  "level": "beginner",
+  "format": "video",
+  "maximum_duration_minutes": 30,
+  "goal_context": "machine learning"
+}
+```
+
+This object is the:
+
+> **Search Requirement**
+
+The external search system does not need the entire Digital Twin.
+
+It only receives the information necessary to find appropriate resources.
+
+---
+
+# 5. Step 2 — Resource Retrieval
+
+The Resource Retrieval System searches for possible resources.
+
+Its responsibility is:
+
+> **Find candidates that might satisfy the learner's requirements.**
+
+It does not make the final recommendation.
+
+For example:
+
+```text
+Search Requirements:
+Topic = Linear Algebra
+Format = Video
+Level = Beginner
+Duration ≤ 30 minutes
+```
+
+The retrieval system may return:
+
+```text
+Candidate A
+Title: Linear Algebra Basics
+Duration: 25 minutes
+URL: ...
+Source: YouTube
+
+Candidate B
+Title: Matrix Multiplication
+Duration: 28 minutes
+URL: ...
+Source: YouTube
+
+Candidate C
+Title: Advanced Linear Algebra
+Duration: 25 minutes
+URL: ...
+Source: YouTube
+```
+
+These are only candidates.
+
+The system has not yet decided which one is best.
+
+---
+
+# 6. Important Separation of Responsibilities
+
+The Resource Retrieval System:
+
+```text
+Finds possible resources.
+```
+
+The Verification System:
+
+```text
+Checks whether resources are real and suitable.
+```
+
+The Recommendation Engine:
+
+```text
+Scores and ranks verified resources.
+```
+
+This is the separation:
+
+```text
+Search
+  ↓
+Possible Resources
+  ↓
+Verification
+  ↓
+Verified Resources
+  ↓
+Recommendation Engine
+  ↓
+Best Resource
+```
+
+The Recommendation Engine should not be responsible for searching the internet.
+
+---
+
+# 7. Step 3 — Resource Verification
+
+A resource should not be recommended simply because a search system returned it.
+
+The Verification Gate checks it.
+
+## Check 1 — Does the resource exist?
+
+```text
+Does the URL work?
+```
+
+## Check 2 — Is the resource accessible?
+
+```text
+Can the system access the resource?
+```
+
+## Check 3 — Does the metadata match?
+
+```text
+Does the actual title match the returned title?
+```
+
+## Check 4 — Does the content match the requirement?
+
+For example:
+
+```text
+Requested:
+Beginner Linear Algebra Video
+```
+
+The system should check:
+
+```text
+Topic = Linear Algebra ✓
+Format = Video ✓
+Level = Beginner ✓
+Duration = 25 minutes ✓
+```
+
+Only after passing verification can the resource enter the recommendation process.
+
+```text
+Raw Candidate
+      ↓
+Verification
+      ↓
+      ├── PASS → Verified Candidate
+      │
+      └── FAIL → Discard
+```
+
+The important rule is:
+
+> **An unverified resource must never be recommended just because the system failed to find something better.**
+
+---
+
+# 8. Step 4 — The Recommendation Engine
+
+The Recommendation Engine is **not an LLM**.
+
+It is code.
+
+Its responsibility is:
+
+> **Select and rank the best verified resource for the specific learner.**
+
+It receives:
+
+```text
+Learner Requirements
+        +
+Verified Candidate Resources
+```
+
+For example:
+
+```text
+Learner:
+Beginner
+Interested in Machine Learning
+Weak in Linear Algebra
+Prefers Videos
+Maximum 30 minutes
+```
+
+Candidates:
+
+```text
+A:
+Beginner
+Linear Algebra
+25 minutes
+Video
+
+B:
+Advanced
+Linear Algebra
+90 minutes
+Video
+
+C:
+Beginner
+Linear Algebra
+30 minutes
+Video
+```
+
+The Recommendation Engine can calculate:
+
+```text
+Score =
+    Topic Match
+  + Goal Alignment
+  + Difficulty Match
+  + Format Match
+  + Duration Match
+  - Already Seen Penalty
+```
+
+For example:
+
+```text
+Candidate A = 0.92
+Candidate B = 0.40
+Candidate C = 0.87
+```
+
+The system ranks:
+
+```text
+A
+↓
+C
+↓
+B
+```
+
+The final recommendation is:
+
+```text
+Candidate A
+```
+
+This is deterministic and explainable.
+
+---
+
+# 9. Why the Recommendation Engine Should Be Code
+
+If an LLM chooses the final recommendation, the result may change because:
+
+```text
+The wording changed.
+The model interpreted the data differently.
+The model produced a different answer.
+```
+
+But with code:
+
+```text
+Same Input
+    +
+Same Scoring Policy
+    ↓
+Same Result
+```
+
+This makes the system:
+
+```text
+More reproducible
+More testable
+More explainable
+Easier to evaluate
+Easier to debug
+```
+
+The research hypothesis becomes:
+
+> **The Digital Twin changes the input to a deterministic recommendation policy, which causes different learners to receive different recommendations.**
+
+---
+
+# 10. Example: Two Different Students
+
+## Student A
+
+```text
+Goal:
+Machine Learning
+
+Weakness:
+Linear Algebra
+
+Level:
+Beginner
+
+Preference:
+Short Videos
+```
+
+The Recommendation Engine may select:
+
+```text
+Beginner Linear Algebra Video
+```
+
+---
+
+## Student B
+
+```text
+Goal:
+Natural Language Processing
+
+Strength:
+Linear Algebra
+
+Interest:
+NLP
+
+Preference:
+Articles
+```
+
+The Recommendation Engine may select:
+
+```text
+Transformer Architecture Article
+```
+
+Both students ask:
+
+> "What should I study today?"
+
+The prompt is identical.
+
+The recommendation changes because:
+
+```text
+Digital Twin A ≠ Digital Twin B
+```
+
+Therefore:
+
+```text
+Recommendation A ≠ Recommendation B
+```
+
+This demonstrates:
+
+> **Personalization is caused by the architecture and learner state, not simply by changing the prompt.**
+
+---
+
+# 11. What Happens If There Are No Resources?
+
+The system should not immediately fabricate a URL.
+
+Instead, it should use a fallback hierarchy.
+
+## Fallback 1 — Existing Verified Resources
+
+```text
+External Search
+      ↓
+      FAIL
+      ↓
+Existing Verified Resource Store
+```
+
+If a suitable resource already exists:
+
+```text
+Retrieve
+   ↓
+Verify Freshness
+   ↓
+Recommendation Engine
+```
+
+This is faster.
+
+---
+
+## Fallback 2 — Alternative Search Source
+
+If the primary source fails:
+
+```text
+Primary Source
+      ↓
+      FAIL
+      ↓
+Alternative Source
+```
+
+For example:
+
+```text
+Video Search
+      ↓
+Alternative Educational Source
+      ↓
+Internal Resource Catalog
+```
+
+The exact sources are an implementation decision.
+
+---
+
+## Fallback 3 — Relax Search Constraints
+
+Suppose the user requests:
+
+```text
+Beginner
+Linear Algebra
+Video
+Maximum 20 minutes
+```
+
+No suitable result exists.
+
+The system may gradually relax one constraint:
+
+```text
+20 minutes
+      ↓
+30 minutes
+```
+
+Then:
+
+```text
+Search Again
+```
+
+The system should be transparent:
+
+> "I couldn't find a verified resource under 20 minutes, so I found the closest verified option at 28 minutes."
+
+The system should not silently change all requirements.
+
+---
+
+## Fallback 4 — Ask the Learner
+
+The Study Coach can ask:
+
+> "I couldn't find a suitable verified video under 20 minutes. Would you prefer a longer video or an article?"
+
+The learner's answer creates new search requirements.
+
+```text
+Study Coach
+      ↓
+Ask Learner
+      ↓
+New Preference
+      ↓
+Search Again
+```
+
+---
+
+## Fallback 5 — Teach Directly
+
+If no verified external resource is available:
+
+```text
+External Search ✗
+      ↓
+No Cached Resource
+      ↓
+No Alternative Source
+      ↓
+No Suitable Result
+```
+
+The Study Coach can still help:
+
+```text
+Explain the concept
+Create practice questions
+Create a study plan
+```
+
+The system remains useful without pretending that an external resource exists.
+
+---
+
+# 12. The Background Resource Preparation Idea
+
+One of the ideas we discussed is that the system should not always wait until the learner asks for a resource.
+
+While the learner interacts with the system, the system may discover useful information:
+
+```text
+User:
+"I am struggling with recursion."
+
+User:
+"I want to become a cybersecurity engineer."
+
+User:
+"I prefer short videos."
+```
+
+This can create:
+
+```text
+Resource Need
+```
+
+The background process can then:
+
+```text
+Digital Twin Signals
+        ↓
+Resource Need Detection
+        ↓
+Search
+        ↓
+Verification
+        ↓
+Store Verified Resources
+```
+
+Later:
+
+```text
+User:
+"What should I study today?"
+```
+
+The system may already have:
+
+```text
+Verified Resources
+```
+
+Therefore:
+
+```text
+Recommendation Engine
+        ↓
+Fast Ranking
+        ↓
+Fast Response
+```
+
+This is similar to preparing resources in advance.
+
+The user does not need to wait for every search to happen after asking the question.
+
+---
+
+# 13. The Study Coach and Background Search
+
+If a resource search takes time, the Study Coach can have a useful role.
+
+The Study Coach should not simply distract the user.
+
+Instead, it can:
+
+```text
+Understand the learner's need
+        ↓
+Ask useful clarification questions
+        ↓
+Collect preferences
+        ↓
+Improve the search requirements
+```
+
+Example:
+
+### User:
+
+> "What should I study about recursion?"
+
+### Study Coach:
+
+> "Are you looking for a quick explanation or coding practice?"
+
+### User:
+
+> "A quick explanation."
+
+This creates:
+
+```text
+Topic:
+Recursion
+
+Format:
+Explanation / Video
+
+Preference:
+Quick
+```
+
+The information improves the resource search.
+
+Meanwhile:
+
+```text
+Resource Retrieval
+        ↓
+Verification
+```
+
+can work in parallel.
+
+Therefore, the Study Coach is performing a real function:
+
+> **It gathers missing information about the learner while the system prepares a more accurate recommendation.**
+
+---
+
+# 14. The Three-Speed Architecture
+
+The system can operate at three speeds.
+
+## Speed 1 — Immediate
+
+Suitable verified resources already exist.
+
+```text
+User Request
+      ↓
+Existing Verified Resources
+      ↓
+Recommendation Engine
+      ↓
+Fast Response
+```
+
+---
+
+## Speed 2 — Interactive
+
+Some information is missing.
+
+```text
+User Request
+      ↓
+Study Coach
+      ↓
+Ask Clarifying Question
+      ↓
+Improved Search Requirements
+```
+
+---
+
+## Speed 3 — Background
+
+Resources are prepared before the user asks.
+
+```text
+Learner Interaction
+      ↓
+Detect Potential Need
+      ↓
+Search
+      ↓
+Verify
+      ↓
+Store
+      ↓
+Ready for Future Recommendation
+```
+
+The full idea is:
+
+```text
+                USER
+                  │
+                  ▼
+           User Interaction
+                  │
+          ┌───────┴────────┐
+          │                │
+          ▼                ▼
+   Immediate Request   Background Signals
+          │                │
+          ▼                ▼
+   Check Resources     Detect Future Need
+          │                │
+          │                ▼
+          │             Search
+          │                │
+          │                ▼
+          │           Verification
+          │                │
+          │                ▼
+          │             Store
+          │
+          ▼
+   Recommendation Engine
+          │
+          ▼
+       Response
+```
+
+---
+
+# 15. Resource Storage
+
+We should distinguish between:
+
+## The Digital Twin
+
+```text
+Information about the learner
+```
+
+and:
+
+## The Resource Store
+
+```text
+Information about learning resources
+```
+
+The Resource Store may contain:
+
+```text
+Resource ID
+Title
+URL
+Resource Type
+Topic
+Difficulty
+Duration
+Source
+Verification Status
+Last Verified Time
+```
+
+Example:
+
+```json
+{
+  "resource_id": "resource_123",
+  "title": "Linear Algebra Basics",
+  "url": "...",
+  "type": "video",
+  "topic": "linear algebra",
+  "difficulty": "beginner",
+  "duration_minutes": 28,
+  "verified": true,
+  "last_verified": "..."
+}
+```
+
+The Digital Twin can contain:
+
+```text
+The learner has already seen Resource 123.
+```
+
+But the actual resource itself does not necessarily need to be stored inside the Digital Twin.
+
+This distinction should be discussed with Team Alpha because ownership of the Resource Store is an architectural decision.
+
+---
+
+# 16. Current Responsibility Ownership
+
+| Responsibility                              | Owner                        |
+| ------------------------------------------- | ---------------------------- |
+| Store learner information                   | Digital Twin / Team Alpha    |
+| Select relevant learner information         | Retrieval/Selection Pipeline |
+| Build search requirements                   | Search Requirement Builder   |
+| Find possible resources                     | Resource Retrieval System    |
+| Check whether resources are valid           | Verification Gate            |
+| Score resources                             | Recommendation Engine        |
+| Rank resources                              | Recommendation Engine        |
+| Choose final resource                       | Recommendation Engine        |
+| Explain why it was chosen                   | Explainability Agent         |
+| Coordinate workflows                        | Orchestrator                 |
+| Ask the learner clarification questions     | Study Coach                  |
+| Decide whether a memory update is permanent | Memory Decision Node         |
+
+---
+
+# 17. The Most Important Separation
+
+The final architecture should not be:
+
+```text
+LLM
+  ↓
+Search
+  ↓
+Recommendation
+```
+
+Instead:
+
+```text
+Digital Twin
+      ↓
+Learner Requirements
+      ↓
+Resource Retrieval
+      ↓
+Possible Resources
+      ↓
+Verification
+      ↓
+Verified Resources
+      ↓
+Recommendation Engine
+      ↓
+CODE
+      ↓
+Score + Rank
+      ↓
+Best Resource
+      ↓
+Explainability
+      ↓
+Response
+```
+
+The core rule is:
+
+> **The search system finds. The verification system validates. The Recommendation Engine calculates. The Explainability Agent explains.**
+
+---
+
+# 18. The Main Architectural Decisions We Still Need to Discuss
+
+Before implementing the complete system, the team should decide:
+
+### 1. Who owns the Resource Store?
+
+Is it:
+
+```text
+Team Alpha
+```
+
+or:
+
+```text
+Team Beta
+```
+
+or:
+
+```text
+Shared infrastructure
+```
+
+---
+
+### 2. Which external sources will be used?
+
+For example:
+
+```text
+Video source
+Article source
+Book source
+Course source
+```
+
+---
+
+### 3. How is a resource verified?
+
+For example:
+
+```text
+URL exists
+Resource is accessible
+Metadata matches
+Topic matches
+Difficulty matches
+```
+
+---
+
+### 4. How long is a resource considered verified?
+
+For example:
+
+```text
+Verified today
+```
+
+does not necessarily mean:
+
+```text
+Still valid one year later
+```
+
+---
+
+### 5. When should background preparation happen?
+
+Possible triggers:
+
+```text
+Learner mentions a weakness
+Learner starts a new goal
+Learner asks about a topic
+Learner repeatedly struggles
+```
+
+---
+
+### 6. What constraints can be relaxed?
+
+For example:
+
+```text
+Duration
+Format
+Difficulty
+Source
+```
+
+The system should define the order of relaxation.
+
+---
+
+# Final Summary
+
+Our proposed system is:
+
+```text
+              LEARNER
+                 │
+                 ▼
+          DIGITAL TWIN
+                 │
+                 ▼
+       RELEVANT LEARNER STATE
+                 │
+                 ▼
+       SEARCH REQUIREMENTS
+                 │
+                 ▼
+       RESOURCE RETRIEVAL
+                 │
+                 ▼
+         RAW CANDIDATES
+                 │
+                 ▼
+        VERIFICATION GATE
+                 │
+          ┌──────┴──────┐
+          │             │
+         PASS          FAIL
+          │             │
+          ▼             ▼
+   VERIFIED RESOURCES  DISCARD
+          │
+          ▼
+  RECOMMENDATION ENGINE
+        (CODE)
+          │
+          ▼
+       SCORE + RANK
+          │
+          ▼
+    DECISION RECORD
+          │
+          ▼
+  EXPLAINABILITY AGENT
+          │
+          ▼
+        RESPONSE
+```
+
+With fallback support:
+
+```text
+External Search
+      ↓ fails
+Verified Resource Store
+      ↓ unavailable
+Alternative Source
+      ↓ unavailable
+Relax Constraints
+      ↓ no result
+Study Coach Clarification
+      ↓
+Search Again
+      ↓ no result
+Direct Teaching
+```
+
+And with background preparation:
+
+```text
+Learner Interaction
+        ↓
+Detect Future Learning Need
+        ↓
+Search in Background
+        ↓
+Verify Resources
+        ↓
+Store Resources
+        ↓
+Fast Future Recommendation
+```
+
+The main architectural principle is:
+
+> **The Digital Twin provides personalized information about the learner. The Retrieval System finds possible learning resources. The Verification Gate ensures that resources are real and suitable. The code-based Recommendation Engine ranks the verified resources according to the learner's needs. The Explainability Agent explains the final decision. Fallback mechanisms ensure that the system fails safely instead of fabricating resources.**
