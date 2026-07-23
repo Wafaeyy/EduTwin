@@ -104,7 +104,7 @@ def extract_concept(content :str)->dict[str , str]:
 
     return json.loads(response.text) #this turns it into a dictionary
 
-G = nx.Graph()
+G = nx.DiGraph()
 #node = knowledgeNode()#useless btw, for testing 
 #elist = [(1, 2), (2, 3), (1, 4), (4, 2)]
 #G.add_edges_from(elist)
@@ -132,7 +132,7 @@ def cosine_similarity(a,b):
 
 
 
-def search_node (name:str, description:str, prerequisite:bool):
+def search_node (name:str, description:str, create:bool):
     embed = get_embedding(name)
     highestSimi=-1
     node_highest=None
@@ -150,13 +150,13 @@ def search_node (name:str, description:str, prerequisite:bool):
         if ask_yes_no(question=q):
             return node_highest
         else:
-            if not prerequisite:
+            if create:
                 create_node(name=name, description=description,embedding=embed)
                 add_prerequisites(name=name, description=description)
             return
 
     else :
-        if not prerequisite:
+        if create:
             create_node(name=name, description=description,embedding=embed)
             add_prerequisites(name=name, description=description)
         return
@@ -176,10 +176,21 @@ def create_node(name:str , description:str,embedding :list[float]):
 def add_prerequisites(name,description):
     listprere=get_prerequisites(concept=name , description=description)
     for p in listprere:
-        n= search_node(p,"",True)
+        n= search_node(p,"",False)
         if n != None:
-            G.add_edge(name,n)
+            G.add_edge(n,name)
+def get_node_predecessors(name:str)->list[KnowledgeNode]:
+    L:list[KnowledgeNode] =[]
+    for node in list(G.predecessors(name)):
+        L.append(G.nodes[node]["knowledgeNode"])
+    return L
+    
 
+def get_node_successors(name:str)->list[KnowledgeNode]:
+    L:list[KnowledgeNode]=[]
+    for node in list(G.successors(name)):
+        L.append(G.nodes[node]["knowledgeNode"])
+    return L
 ## TODO when creating a new node send to LLM to make 5-10 prerequisites cosine similarity to search (and save their embedding) if these already exist or make new ones and make edges inbetween 
 
 ## G.add_node(
