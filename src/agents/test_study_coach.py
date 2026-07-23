@@ -23,7 +23,7 @@ def build_briefing(t):
     ])
 
 intent = "concept_explanation"          # stub until the intent classifier exists
-student_question = "How do I differentiate sin(2x)? I keep getting cos(2x)."
+student_question = "For sin(2x) I take cos(2x) and multiply by the derivative of the inside, which is 2, so 2cos(2x) — right?"
 
 user_block = f"""<student_message>
 {student_question}
