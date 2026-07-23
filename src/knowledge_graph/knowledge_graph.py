@@ -19,7 +19,7 @@ class YesNoResponse(BaseModel):
     )    
 def ask_yes_no (question:str)-> bool:
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.6-flash",
         contents=question,
         config={
             "response_mime_type":"application/json",
@@ -34,7 +34,7 @@ class prerequisites (BaseModel):
     )
 def get_prerequisites(concept:str , description :str)->  list[str]:
     response= client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.6-flash",
         contents=f"""You are an educational knowledge graph assistant.
             
             Given the concept below, identify the essential prerequisite concepts that someone should understand before learning it.
@@ -97,7 +97,7 @@ def extract_concept(content :str)->dict[str , str]:
     User message:
     {content}"""
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.6-flash",
         contents=prompt
     )
     
