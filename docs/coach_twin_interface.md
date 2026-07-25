@@ -153,6 +153,49 @@ the conflict is itself information: it says the belief is unstable. A sensible
 response is to lower *confidence in the belief* and flag the concept for a
 deliberate probe, rather than silently flip-flopping.
 
+### Case E — Overlapping evidence within a session
+
+Observed in a live three-turn session. The Coach emitted, on the same concept:
+
+| Turn | Signal | Evidence cited | Confidence |
+|---|---|---|---|
+| 1 | `briefing_contradicted` | A | 0.75 |
+| 2 | `briefing_contradicted` | A, B | 0.90 |
+| 3 | `briefing_contradicted` | A, B, C | 0.95 |
+
+Three signals arrived, but the session contained only three student statements
+(A, B, C). Because the Coach is required to cite every instance its confidence
+rests on, later signals **re-cite earlier evidence**. A Twin that treats each
+arriving signal as independent evidence would count A three times, B twice, and
+C once.
+
+**These signals are not independent observations.** They are successive
+refinements of the same claim.
+
+Two possible resolutions:
+
+**Option 1 — deduplicate on evidence content.** The Twin inspects the `evidence`
+field and detects that turn 3's evidence subsumes turns 1 and 2. Robust if the
+Coach's citation behaviour is imperfect, but requires non-trivial text matching.
+
+**Option 2 — supersession.** Within one session, a new signal on the same
+(`concept`, `signal`) pair **replaces** the stored one rather than adding to it.
+Applied on arrival, so no session-end event is needed: the Twin holds 0.75, then
+0.90, then 0.95, and always has a current best answer even if the session ends
+abruptly. Because the key includes `concept`, a student switching topics
+mid-session is handled automatically — signals on different concepts never
+overwrite each other.
+
+Trade-off: Option 2 is trivial to implement but **depends on the Coach reliably
+citing all instances**. If the model ever cites only the most recent instance,
+overwriting would discard evidence rather than refine it. Option 1 is more work
+but tolerates that failure. Note also that supersession assumes within-session
+evidence only refines in one direction; a student who answers correctly three
+times and then badly wrong is making a *different* claim, not a refinement.
+
+**This is a Twin-side decision.** The Coach reports what it observes; it cannot
+know what the Twin already holds.
+
 ---
 
 ## 6. Two hazards to design against
@@ -228,6 +271,17 @@ is usually needed.
 16. Should signals carry a `session_id` and `turn_index`? *(Needed to answer
     Q8 and to detect within-session duplicates.)*
 
+
+### Aggregation
+ 17. Are multiple signals on the same (`concept`, `signal`) pair within one
+    session treated as independent evidence, deduplicated by evidence content, or
+    superseded (Case E)? *A naive "each signal is new evidence" aggregator will
+    inflate beliefs.*
+18. Does the Twin distinguish within-session refinement from across-session
+    repetition? They should aggregate differently — see Case C.
+19. Signal order within a turn is not stable: the Coach emitted
+    `briefing_contradicted` first on one turn and `mastery_evidence` first on the
+    next. Any consumer must route on the `signal` field, never on position.
 ---
 
 ## 8. Summary of the division of responsibility
