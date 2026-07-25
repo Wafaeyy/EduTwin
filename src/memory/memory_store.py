@@ -55,9 +55,11 @@ class MemoryStore:
             False -> Duplicate memory detected.
         """
 
-        document = self._memory_to_document(memory)
+        document = memory.model_dump_json()
 
-        embedding = self._generate_embedding(document)
+        searchable_text = self._memory_to_document(memory)
+
+        embedding = self._generate_embedding(searchable_text)
 
         # Search for the most similar memory of the same type
         results = self.collection.query(
@@ -67,7 +69,7 @@ class MemoryStore:
                 "memory_type": memory.memory_type.value
             },
             include=["distances"]
-        )
+        )       
 
         # If there is already a similar memory, don't store it
         if results["ids"][0]:
