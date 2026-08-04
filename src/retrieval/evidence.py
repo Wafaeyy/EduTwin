@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from twin.enums import EvidenceSource
+from src.twin.enums import EvidenceSource
 
 
 class Evidence(BaseModel):

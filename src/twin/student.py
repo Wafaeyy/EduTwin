@@ -16,12 +16,12 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from twin.profile import Profile
-from twin.goal import Goal
-from twin.preference import Preference
-from twin.knowledge import Knowledge
-from twin.skill import Skill
-from twin.interest import Interest
+from src.twin.profile import Profile
+from src.twin.goal import Goal
+from src.twin.preference import Preference
+from src.twin.knowledge import Knowledge
+from src.twin.skill import Skill
+from src.twin.interest import Interest
 
 
 class StudentTwin(BaseModel):

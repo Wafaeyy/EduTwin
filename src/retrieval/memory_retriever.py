@@ -2,7 +2,7 @@ from src.memory.memory import Memory
 from src.memory.memory_store import MemoryStore
 from src.retrieval.evidence import Evidence
 from src.retrieval.retrieval_request import RetrievalRequest
-from twin.enums import EvidenceSource
+from src.twin.enums import EvidenceSource
 from datetime import datetime, timezone
 
 RELEVANCE_WEIGHT = 0.6
