@@ -1,0 +1,3 @@
+
+Install sentence-transformers to run
+install requests
