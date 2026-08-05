@@ -1,8 +1,3 @@
-"""
-Team Beta - Recommendation Engine
-Main pipeline: wires every module together, matching the target pipeline
-sketch from Section 21 of the project document.
-"""
 
 from twin.mock_twin import get_relevant_digital_twin_state, normalize_learner_state
 from retrieval.search_requirement import build_search_requirement

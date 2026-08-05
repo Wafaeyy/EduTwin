@@ -7,7 +7,16 @@ these lists automatically sees the update.
 """
 
 KNOWN_LEVELS = ["beginner", "intermediate", "advanced"]
-KNOWN_FORMATS = ["video", "article", "course", "book", "tutorial", "documentation"]
+KNOWN_FORMATS = [
+    "video",
+    "article",
+    "course",
+    "book",
+    "tutorial",
+    "documentation",
+    "research_paper",
+    "practice_platform",
+]
 KNOWN_DURATIONS = ["short", "medium", "long"]
 
 FIELD_ALIASES = {

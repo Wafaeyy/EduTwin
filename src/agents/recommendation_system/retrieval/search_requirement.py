@@ -12,11 +12,12 @@ def build_search_requirement(learner):
         learner (dict): normalized learner state.
 
     Returns:
-        dict: a smaller dictionary describing what kind of resource to look for.
+        dict: describes what kind of resource to look for.
     """
     search_requirement = {
         "topic": learner["goal"],
         "level": learner["level"],
+        "format": learner["preferred_format"],
     }
 
     return search_requirement
