@@ -1,0 +1,4 @@
+
+Install sentence-transformers to run #this for the semantic embbiding
+install requests #this for verification
+install duckduckgo_search (ddgs) #this for resource retrival discovery

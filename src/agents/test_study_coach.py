@@ -12,7 +12,10 @@ Run from the project root:
 
 from google import genai
 from google.genai import types
-
+from src.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+from src.retrieval.context_builder import ContextBuilder
+##import all b2a ya basha
+## ContextBuilder.build(RetrievalOrchestrator.retrieve(twin,query)) instead of build_briefing
 client = genai.Client()  # reads GEMINI_API_KEY from the environment
 
 MODEL = "gemini-3.6-flash"

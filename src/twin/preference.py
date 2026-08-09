@@ -24,7 +24,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from twin.enums import (
+from src.twin.enums import (
     PreferenceDimension,
     PREFERENCE_OPTION_ENUMS,
     LearningContext

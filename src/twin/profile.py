@@ -17,7 +17,7 @@ Author: EduTwin Research Team
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
-from twin import enums  
+from src.twin import enums  
 
 
 class Profile(BaseModel):
@@ -28,11 +28,6 @@ class Profile(BaseModel):
     that changes infrequently throughout the learner's journey.
     """
     model_config = ConfigDict(extra= "forbid")
-
-    student_id: UUID = Field(
-        default_factory=uuid4,
-        description="Globally unique identifier for the learner."
-    )
 
     full_name: str = Field(
         ...,

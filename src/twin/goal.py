@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from twin.enums import GoalPriority, GoalStatus
+from src.twin.enums import GoalPriority, GoalStatus
 
 class Goal(BaseModel):
     """

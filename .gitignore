@@ -219,6 +219,7 @@ __marimo__/
 
 .venv/
 .env
+*.env
 __pycache__/
 .ipynb_checkpoints/
 *.pyc

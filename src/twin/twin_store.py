@@ -218,7 +218,7 @@ class TwinStore:
     ) -> str:
 
         return (
-            f"Knowledge: {knowledge.topic}. "
+            f"Knowledge: {knowledge.title}. "
             f"Mastery: {knowledge.mastery:.2f}."
         )
 
@@ -227,11 +227,19 @@ class TwinStore:
         interest: Interest,
     ) -> str:
 
-        return interest.name
+        return (
+                    f"Interest: {interest.topic}. "
+                    f"Affinity: {interest.affinity:.2f}."
+                    f"Confidence: {interest.confidence:.2f}."
+                )
 
     @staticmethod
     def _preference_to_document(
         preference: Preference,
     ) -> str:
 
-        return str(preference)
+        return (
+                            f"Dimension: {preference.dimension}. "
+                            f"Context: {preference.context}."
+                            f"Affinities: {preference.affinities}."
+                        )
