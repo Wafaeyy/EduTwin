@@ -22,7 +22,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 
-from twin.enums import MemoryType
+from twin.enums import TwinComponent
 
 class Memory(BaseModel):
     """
@@ -39,8 +39,12 @@ class Memory(BaseModel):
         description="Globally unique identifier for this memory."
     )
 
-    memory_type: MemoryType = Field(
-        description="Type of learner interaction."
+    affected_components: list[TwinComponent] = Field(
+        ...,
+        default_factory= list,
+        description=(
+            "Twin components that may be affected by this memory."
+        )
     )
 
     content: str = Field(

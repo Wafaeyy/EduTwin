@@ -13,7 +13,7 @@ MemoryStore is responsible for:
 
 It performs no semantic retrieval or ranking.
 """
-
+## IF ERROR HAPPENS If it throws a metadata-type error at runtime, then we'll convert the enum values to strings. No need to add complexity before we actually need it. F0R AFFECTED COMPONENTS
 from uuid import UUID
 
 import chromadb
@@ -65,9 +65,6 @@ class MemoryStore:
         results = self.collection.query(
             query_embeddings=[embedding],
             n_results=1,
-            where={
-                "memory_type": memory.memory_type.value
-            },
             include=["distances"]
         )       
 
@@ -76,7 +73,7 @@ class MemoryStore:
 
             distance = results["distances"][0][0]
 
-            similarity = 1.0 - distance
+            similarity = 1.0 / (1.0 + distance)
 
             if similarity >= DUPLICATE_THRESHOLD:
                 return False
@@ -87,7 +84,7 @@ class MemoryStore:
             documents=[document],
             embeddings=[embedding],
             metadatas=[{
-                "memory_type": memory.memory_type.value,
+                "affected_components": memory.affected_components,
                 "importance": memory.importance,
                 "archived": False,
                 "created_at": memory.created_at.isoformat()
@@ -166,14 +163,27 @@ class MemoryStore:
     # Private Helpers
     #####################################################################
 
-    def _memory_to_document(self, memory: Memory) -> str:
+    def _memory_to_document(
+        self,
+        memory: Memory,
+    ) -> str:
         """
         Converts a Memory into a semantically searchable document.
         """
 
+        components = ", ".join(
+            component.value
+            for component in memory.affected_components
+        )
+
+        if components:
+            return (
+                f"Affected components: {components}. "
+                f"Memory: {memory.content}"
+            )
+
         return (
-            f"{memory.memory_type.value}: "
-            f"{memory.content}"
+            f"Memory: {memory.content}"
         )
 
     def _generate_embedding(self, text: str) -> list[float]:

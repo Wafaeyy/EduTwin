@@ -6,15 +6,15 @@ Determines whether an interaction should become a long-term memory.
 Pipeline
 
 Interaction
-    ↓
+↓
 Rule Filter
-    ↓
+↓
 Gemini Classification
-    ↓
+↓
 Memory Candidate
-    ↓
+↓
 Duplicate Detection
-    ↓
+↓
 MemoryStore
 """
 
@@ -23,9 +23,9 @@ import re
 from google import genai
 from pydantic import BaseModel, Field
 
-from twin.enums import MemoryType
+from src.twin.enums import TwinComponent
 from src.memory.memory import Memory
-from memory.memory_store import MemoryStore
+from src.memory.memory_store import MemoryStore
 
 
 class MemoryDecisionResponse(BaseModel):
@@ -35,8 +35,6 @@ class MemoryDecisionResponse(BaseModel):
 
     store: bool
 
-    memory_type: MemoryType | None = None
-
     importance: float | None = Field(
         default=None,
         ge=0.0,
@@ -44,6 +42,10 @@ class MemoryDecisionResponse(BaseModel):
     )
 
     content: str | None = None
+
+    affected_components: list[TwinComponent] = Field(
+        default_factory=list
+    )
 
 
 class MemoryDecision:
@@ -73,7 +75,7 @@ class MemoryDecision:
         self,
         user_message: str,
         assistant_message: str
-    ) -> bool:
+    ) -> Memory | None:
         """
         Returns True if a new memory was stored.
         """
@@ -87,13 +89,13 @@ class MemoryDecision:
         )
 
         if not decision.store:
-            return False
+            return None
 
         memory = self._build_memory(decision)
 
         self.memory_store.add_memory(memory)
 
-        return True
+        return memory
 
     ####################################################################
     # Rule Filter
@@ -133,9 +135,11 @@ class MemoryDecision:
         prompt = f"""
 You are the Memory Decision module of EduTwin.
 
-A memory represents durable information that improves future personalization.
+A memory represents durable information about the learner that
+can improve future personalization.
 
-Store memories only if they represent:
+Store memories only if they represent durable learner information
+such as:
 
 • Goals
 • Preferences
@@ -152,8 +156,29 @@ Do NOT store:
 • Temporary requests
 • Simple factual questions
 • Politeness
+• Information that has no long-term value
 
-Summarize the interaction into ONE concise memory.
+If the interaction should be stored:
+
+1. Summarize the learner-relevant information into ONE concise memory.
+2. Assign an importance score from 0.0 to 1.0.
+3. Identify which StudentTwin components may be affected.
+
+The available Twin components are:
+
+• knowledge
+• skill
+• interest
+• preference
+• goal
+
+A memory may affect multiple components.
+
+If the memory does not provide meaningful evidence for any
+current Twin component, return an empty affected_components list.
+
+Do not identify specific entities or IDs.
+Entity resolution is handled by a separate module.
 
 Interaction
 
@@ -185,8 +210,7 @@ Assistant:
     ) -> Memory:
 
         if (
-            decision.memory_type is None
-            or decision.importance is None
+            decision.importance is None
             or decision.content is None
         ):
             raise ValueError(
@@ -194,7 +218,7 @@ Assistant:
             )
 
         return Memory(
-            memory_type=decision.memory_type,
+            content=decision.content,
             importance=decision.importance,
-            content=decision.content
+            affected_components=decision.affected_components
         )
