@@ -5,63 +5,14 @@ from src.twin.skill import Skill
 import json
 import numpy as np
 from google import genai
-from pydantic import BaseModel,Field
+from pydantic import BaseModel ,  Field
 import os
-from dotenv import load_dotenv,find_dotenv
+from dotenv import load_dotenv
 from typing import Optional
 
-#load_dotenv(find_dotenv(),override=True)
+load_dotenv()
 
-
-import time
-from google.genai.errors import ClientError
-
-
-
-
-
-
-
-
-api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
-
-
-
-def safe_generate_content(model: str, contents: str, config: dict = None):
-    """Wraps generate_content to automatically wait out 429 rate limits on Free Tier."""
-    while True:
-        try:
-            return client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config
-            )
-        except ClientError as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("\n⚠️ Free Tier Rate Limit hit. Pausing 10 seconds before retrying...")
-                time.sleep(10)
-            else:
-                raise e
-
-
-def safe_embed_content(model: str, contents: str):
-    """Wraps embed_content to automatically wait out 429 rate limits on Free Tier."""
-    while True:
-        try:
-            return client.models.embed_content(
-                model=model,
-                contents=contents
-            )
-        except ClientError as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("\n⚠️ Free Tier Rate Limit hit on Embeddings. Pausing 10 seconds before retrying...")
-                time.sleep(10)
-            else:
-                raise e
-
-
-
+client = genai.Client()
 
 
 class YesNoResponse(BaseModel):
@@ -70,8 +21,8 @@ class YesNoResponse(BaseModel):
     )    
     
 def ask_yes_no (question:str)-> bool:
-    response =safe_generate_content(# client.models.generate_content(
-        model="gemini-2.0-flash",
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
         contents=question,
         config={
             "response_mime_type":"application/json",
@@ -86,8 +37,8 @@ class prerequisites (BaseModel):
     )
     
 def get_prerequisites(concept:str , description :str)->  list[str]:
-    response= safe_generate_content(#client.models.generate_content(
-        model="gemini-2.0-flash",
+    response= client.models.generate_content(
+        model="gemini-3.6-flash",
         contents=f"""You are an educational knowledge graph assistant.
             
             Given the concept below, identify the essential prerequisite concepts that someone should understand before learning it.
@@ -113,28 +64,14 @@ def get_prerequisites(concept:str , description :str)->  list[str]:
     ).parsed
     return response.list_prerequisites
     
-class KnowledgeNode:
-    def __init__(self, knowledge: Knowledge, embedding: list[float], alpha: float = 0.5, beta: float = 0.5):
-        self.knowledge = knowledge
+class KnowledgeNode  :
+    def __init__ (self , knowledge : Knowledge, embedding : list[float]):
+        self.knowledge =knowledge
         self.embedding = embedding
-        self.alpha = alpha
-        self.beta = beta
-        self.recalculate_metrics()
 
-    # Theoretical maximum variance for Beta(0.5, 0.5) is Var_max = 0.125.
-    # Confidence is defined as 1 - (Var / Var_max) = 1 - (8 * Var).
-    def recalculate_metrics(self):
-        # Posterior mean expected mastery: E[X] = alpha / (alpha + beta)
-        self.knowledge.mastery = self.alpha / (self.alpha + self.beta)
-        
-        # Exact Beta variance calculation: Var(X) = (alpha * beta) / ((alpha + beta)^2 * (alpha + beta + 1))
-        variance = (self.alpha * self.beta) / (((self.alpha + self.beta) ** 2) * (self.alpha + self.beta + 1))
-        
-        # Normalized variance-based confidence: ranges smoothly from 0.0 to 1.0 as variance approaches zero
-        self.knowledge.confidence = max(0.0, min(1.0, 1.0 - (8.0 * variance)))
 
 def get_embedding (content :str) -> list[float]:
-    result = safe_embed_content(#client.models.embed_content(
+    result = client.models.embed_content(
     model="gemini-embedding-001",
         contents=content
     )
@@ -168,15 +105,15 @@ def extract_concept(content :str)->dict[str , str]:
 
     User message:
     {content}"""
-    response =safe_generate_content(# client.models.generate_content(
-        model="gemini-2.0-flash",
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
         contents=prompt,
         config={"response_mime_type":"application/json",
                 "response_schema":MutliConcept}
     ).parsed
     
 
-    return [c.model_dump() for c in response.concepts] #this turns it into a dictionary
+    return [c.model_dump for c in response.concepts] #this turns it into a dictionary
 
 G = nx.DiGraph()
 #node = knowledgeNode()#useless btw, for testing 
@@ -274,9 +211,10 @@ def search_node (name:str, description:str, create:bool,precomputed_embed: Optio
 
     #node = knowledgeNode(knowledge=Knowledge(),embedding=embed)
 
-def create_node(name: str, description: str, embedding: list[float]):
-    k = Knowledge(title=name, description=description, mastery=0.5, confidence=0.0)
-    kn = KnowledgeNode(knowledge=k, embedding=embedding, alpha=0.5, beta=0.5)
+def create_node(name:str , description:str,embedding :list[float]):
+    k=Knowledge(title= name ,description=description, mastery=0 ,confidence=0)
+    
+    kn=KnowledgeNode(knowledge=k,embedding= embedding) #TODO can use the embedding used for the search 
     G.add_node(
         name,
         knowledgeNode=kn,
@@ -332,6 +270,8 @@ def get_node_successors(name:str)->list[KnowledgeNode]:
 
 
 
+nx.draw_spring(G)
+mtl.show()
 
 
 

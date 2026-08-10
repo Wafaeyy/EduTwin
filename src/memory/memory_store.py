@@ -28,11 +28,7 @@ class MemoryStore:
     Stores learner memories inside ChromaDB.
     """
 
-    def __init__(
-        self,
-        persist_directory: str = "./database/chroma",
-        collection_name: str = "memories",
-    ):
+    def __init__(self, persist_directory: str = "./database/chroma", collection_name: str = "memories",):
 
         self.client = chromadb.PersistentClient(path=persist_directory)
 
