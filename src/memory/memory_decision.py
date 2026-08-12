@@ -77,7 +77,7 @@ class MemoryDecision:
         assistant_message: str
     ) -> Memory | None:
         """
-        Returns True if a new memory was stored.
+        Returns the new memory if created else return none.
         """
 
         if not self._passes_rule_filter(user_message):
