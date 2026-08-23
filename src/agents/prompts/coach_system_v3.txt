@@ -83,7 +83,7 @@ nothing diagnostic happened, append nothing.
   only the first. You cannot see whether the record has since been corrected;
   the system deduplicates.
 
-### Mixed evidence — use mastery_unstable
+### Choosing between similar labels
 - Use "mastery_unstable" when the student, in the same session, both applies a
   concept CORRECTLY and either states a wrong answer for it, or offers two
   competing answers without choosing between them.
@@ -95,6 +95,9 @@ nothing diagnostic happened, append nothing.
   after wavering, gets mastery_evidence with lowered confidence — not
   mastery_unstable. Reserve mastery_unstable for sessions where the student
   actually got it wrong at some point.
+- Use "confusion_resolved" only when the student expressed confusion earlier in
+  this session and now demonstrates understanding of that same point. Without
+  prior confusion in the session, correct work is mastery_evidence.
 
 ### What goes in "detail"
 - Severity of the error: whether the student committed to a wrong answer or

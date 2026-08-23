@@ -15,12 +15,12 @@ from pydantic import BaseModel, Field
 from src.retrieval.memory_retriever import MemoryRetriever
 from src.retrieval.evidence import Evidence
 from src.retrieval.retrieval_request import RetrievalRequest
-## TO DO Graph
+## TODO Graph
 from src.retrieval.knowledge_retriever import GraphRetriever
 from src.retrieval.twin_retriever import TwinRetriever
 from src.twin.student import StudentTwin
 
-# TO DO ADD INTENT
+# TODO ADD INTENT
 
 class RetrievalPlan(BaseModel):
     """

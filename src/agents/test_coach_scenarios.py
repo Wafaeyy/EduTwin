@@ -541,8 +541,8 @@ SCENARIO_K = {
 
 # Comment out any scenario you do not want to run.
 SCENARIOS = [
-    SCENARIO_A,
-    SCENARIO_B,
+    #SCENARIO_A,
+    #SCENARIO_B,
     #SCENARIO_C,
     #SCENARIO_D,
     #SCENARIO_E,

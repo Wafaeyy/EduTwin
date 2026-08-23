@@ -108,6 +108,9 @@ for turn_index, student_question in enumerate(student_turns, start=1):
     print(f"TURN {turn_index}")
     print(f"{'=' * 70}")
     print(f"STUDENT: {student_question}\n")
+    # NOTE: a turn may now emit MULTIPLE <signal> blocks. Any parser must use
+    # re.findall(r"<signal>(.*?)</signal>", reply, re.DOTALL) — not a single
+    # match — or it will silently drop all but the first.
     print(f"COACH:\n{reply}")
 
     # Record both sides AFTER the call — `reply` does not exist before it.

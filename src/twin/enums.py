@@ -101,19 +101,42 @@ class LearningContext(str, Enum):
 
     PROJECT_WORK = "Project Work"
 
-class MemoryType(str, Enum):
-    """
-    Describes the type of interaction represented by the memory.
-    """
-
-    INTERACTION = "interaction"
-    ASSESSMENT = "assessment"
-    PRACTICE = "practice"
-    PREFERENCE = "preference"
-    GOAL = "goal"
-    SYSTEM = "system"
     
 class EvidenceSource(str, Enum):
     MEMORY = "memory"
     TWIN = "twin"
     GRAPH = "graph"
+    
+    
+class ResolutionStatus(str, Enum):
+    """
+    Result of resolving memory evidence against a Twin component.
+    """
+
+    EXISTING = "existing"
+    NEW = "new"
+    SKIP = "skip"
+    
+class TwinComponent(str, Enum):
+    """
+    Identifies a learner component that may be affected by evidence.
+    """
+
+    KNOWLEDGE = "knowledge"
+    SKILL = "skill"
+    INTEREST = "interest"
+    PREFERENCE = "preference"
+    GOAL = "goal"
+    
+class EvidenceDirection(str, Enum):
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+
+class PerformanceSignal(str, Enum):
+    DEMONSTRATED_CORRECT="DEMONSTRATED_CORRECT"
+    SELF_EXPLANATION_CORRECT="SELF_EXPLANATION_CORRECT"
+    SELF_REPORTED_SUCCESS="SELF_REPORTED_SUCCESS"
+    QUESTION_ASKING ="QUESTION_ASKING"
+    SELF_REPORTED_CONFUSION="SELF_REPORTED_CONFUSION"
+    SELF_EXPLANATION_INCORRECT="SELF_EXPLANATION_INCORRECT"
+    DEMONSTRATED_FAILURE="DEMONSTRATED_FAILURE"
