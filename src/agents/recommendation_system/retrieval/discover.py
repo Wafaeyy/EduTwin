@@ -14,8 +14,8 @@ Install: pip install ddgs
 
 from ddgs import DDGS
 
-from models.resource import Resource
-from verification.domain_policy import is_blocked
+from src.agents.recommendation_system.models.resource import Resource
+from src.agents.recommendation_system.verification.domain_policy import is_blocked
 
 MAX_DISCOVERY_RESULTS = 5
 RESULTS_PER_QUERY = 10

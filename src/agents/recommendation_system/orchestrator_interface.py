@@ -82,14 +82,14 @@ Three intents are supported:
       one the learner pasted in that is not in the catalog.
 """
 
-from main import (
+from src.agents.recommendation_system.main import (
     get_recommendations,
     get_recommendation_with_content,
     reject_recommendations,
     analyze_single_resource,
 )
-from twin.mock_twin import normalize_learner_state
-from twin.context_extractor import extract_learner_state
+from src.agents.recommendation_system.twin.mock_twin import normalize_learner_state
+from src.agents.recommendation_system.twin.context_extractor import extract_learner_state
 
 INTENT_RECOMMEND = "resource_recommendation"
 INTENT_REJECT = "reject_resources"

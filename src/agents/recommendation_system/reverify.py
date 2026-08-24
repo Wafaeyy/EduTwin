@@ -16,8 +16,8 @@ is recorded at all. Two total network failures happened during development;
 without this guard, either one would have wiped the whole catalog.
 """
 
-from verification.verifier import verify_url_reachable
-from database.persistence import (
+from src.agents.recommendation_system.verification.verifier import verify_url_reachable
+from src.agents.recommendation_system.database.persistence import (
     get_resources_due_for_verification,
     mark_verified,
     mark_failed,

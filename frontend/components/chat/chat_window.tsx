@@ -73,7 +73,7 @@ export default function ChatWindow() {
       const assistantMessage: ChatMessage = {
         id: Date.now(),
         role: "assistant",
-        content: response.response,
+        content: response.answer,
       };
 
       setMessages((currentMessages) => [

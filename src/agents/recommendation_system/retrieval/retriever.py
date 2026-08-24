@@ -11,10 +11,10 @@ tier, the next tier runs -- and an exhausted learner therefore falls through
 to discovery, where query variation finds genuinely new material.
 """
 
-from database.resource_store import retrieve_from_database, get_all_resources, add_resources
-from retrieval.discover import discover_resources
-from analysis.resource_analyzer import analyze_resources
-from verification.verifier import verify_resources
+from src.agents.recommendation_system.database.resource_store import retrieve_from_database, get_all_resources, add_resources
+from src.agents.recommendation_system.retrieval.discover import discover_resources
+from src.agents.recommendation_system.analysis.resource_analyzer import analyze_resources
+from src.agents.recommendation_system.verification.verifier import verify_resources
 
 SIMILARITY_THRESHOLD = 0.2
 
@@ -33,12 +33,12 @@ CANDIDATES_PER_ROUND = 15
 MAX_DISCOVERY_ROUNDS = 3
 
 try:
-    from retrieval.embeddings import neural_cosine_similarity
+    from src.agents.recommendation_system.retrieval.embeddings import neural_cosine_similarity
     neural_cosine_similarity("warm-up check", "confirms the model loads")
     similarity_function = neural_cosine_similarity
     print("[semantic retrieval] Using real neural embeddings.")
 except Exception as error:
-    from retrieval.semantic import cosine_similarity
+    from src.agents.recommendation_system.retrieval.semantic import cosine_similarity
     similarity_function = cosine_similarity
     print(f"[semantic retrieval] Neural embeddings unavailable ({error}); falling back to word-count similarity.")
 

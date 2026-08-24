@@ -3,7 +3,7 @@ Builds structured, explainable decision records. Every reason here is
 generated directly from the score breakdown -- never invented by an LLM.
 """
 
-from recommendation.scorer import build_score_breakdown, calculate_confidence
+from src.agents.recommendation_system.recommendation.scorer import build_score_breakdown, calculate_confidence
 
 
 def create_decision_record(learner, resource):

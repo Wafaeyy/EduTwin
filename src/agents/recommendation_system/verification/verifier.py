@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
-from verification.domain_policy import is_blocked, blocked_reason
+from src.agents.recommendation_system.verification.domain_policy import is_blocked, blocked_reason
 
 REQUEST_TIMEOUT_SECONDS = 5
 

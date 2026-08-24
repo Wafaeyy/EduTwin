@@ -50,12 +50,12 @@ class MemoryRetriever:
 
         filtered = candidates
 
-        if request.memory_types is not None:
-            filtered = [
-                (memory, similarity)
-                for memory, similarity in filtered
-                if memory.memory_type in request.memory_types
-            ]
+        ##if request.memory_types is not None:
+         ##   filtered = [
+           ##     (memory, similarity)
+             ##   for memory, similarity in filtered
+               ## if memory.memory_type in request.memory_types
+            ##]
 
         if request.time_range is not None:
             filtered = [
@@ -88,7 +88,17 @@ class MemoryRetriever:
 
         def calculate_score(memory: Memory, similarity: float) -> float:
             # Number of days since the memory was created
-            days_old = (datetime.now(timezone.utc) - memory.timestamp).days
+            created_at = memory.created_at
+
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+
+            age_seconds = (
+            datetime.now(timezone.utc) - created_at
+            ).total_seconds()
+
+            days_old = max(0, age_seconds / 86400)
+
 
             # More recent memories receive a higher score.
             # Today -> 1.0
@@ -121,8 +131,7 @@ class MemoryRetriever:
             content=memory.content,
             reference_id=memory.memory_id,
             metadata={
-                "memory_type": memory.memory_type,
                 "importance": memory.importance,
-                "timestamp": memory.timestamp,
+                "timestamp": memory.created_at,
             },
         )

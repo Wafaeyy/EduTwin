@@ -25,7 +25,7 @@ import json
 
 from google import genai
 
-from config import KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
+from src.agents.recommendation_system.config import KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
 
 GEMINI_MODEL = "gemini-3.5-flash"
 MAX_BRIEFING_CHARACTERS = 20000

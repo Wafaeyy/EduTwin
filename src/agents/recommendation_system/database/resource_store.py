@@ -15,7 +15,7 @@ Nothing outside this module should touch the resource list directly. Use
 get_all_resources(), retrieve_from_database(), or add_resources().
 """
 
-from database.persistence import load_resources, save_resources, count_resources
+from src.agents.recommendation_system.database.persistence import load_resources, save_resources, count_resources
 
 
 # Deliberately empty -- see module docstring. Add Resource objects here to

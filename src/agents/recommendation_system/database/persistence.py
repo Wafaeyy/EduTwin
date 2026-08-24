@@ -19,7 +19,7 @@ import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from models.resource import Resource
+from src.agents.recommendation_system.models.resource import Resource
 
 
 # The columns we read and write, in a fixed order. Deliberately excludes `id`,

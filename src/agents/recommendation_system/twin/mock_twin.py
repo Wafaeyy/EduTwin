@@ -2,7 +2,7 @@
 Everything related to getting and cleaning up learner state.
 """
 
-from config import FIELD_ALIASES, KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
+from src.agents.recommendation_system.config import FIELD_ALIASES, KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
 
 # Stand-in for a real learner's twin_id. Team Alpha's StudentTwin generates a
 # UUID per learner; until we integrate, every mock request uses this one.

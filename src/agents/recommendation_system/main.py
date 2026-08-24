@@ -3,15 +3,15 @@ Team Beta - Recommendation Engine
 Main pipeline: wires every module together.
 """
 
-from twin.mock_twin import get_relevant_digital_twin_state, normalize_learner_state
-from retrieval.search_requirement import build_search_requirement
-from retrieval.retriever import retrieve_with_fallback
-from verification.verifier import verify_resources
-from recommendation.engine import recommend
-from analysis.resource_analyzer import infer_format_from_url
-from analysis.video_content_analyzer import analyze_video_content
-from analysis.article_content_analyzer import analyze_article_content
-from database.persistence import (
+from src.agents.recommendation_system.twin.mock_twin import get_relevant_digital_twin_state, normalize_learner_state
+from src.agents.recommendation_system.retrieval.search_requirement import build_search_requirement
+from src.agents.recommendation_system.retrieval.retriever import retrieve_with_fallback
+from src.agents.recommendation_system.verification.verifier import verify_resources
+from src.agents.recommendation_system.recommendation.engine import recommend
+from src.agents.recommendation_system.analysis.resource_analyzer import infer_format_from_url
+from src.agents.recommendation_system.analysis.video_content_analyzer import analyze_video_content
+from src.agents.recommendation_system.analysis.article_content_analyzer import analyze_article_content
+from src.agents.recommendation_system.database.persistence import (
     get_seen_urls,
     record_shown,
     record_rejected,

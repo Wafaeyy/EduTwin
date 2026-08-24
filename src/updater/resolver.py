@@ -199,7 +199,7 @@ class ResolutionDecision(BaseModel):
     or invents Twin entity UUIDs.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    ##model_config = ConfigDict(extra="forbid")
 
     status: ResolutionStatus
 
@@ -530,7 +530,7 @@ Rules:
 """
 
         response = self.gemini.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt,
             config={
                 "response_mime_type": "application/json",

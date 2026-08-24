@@ -10,7 +10,8 @@ from src.updater.preference_updater import PreferenceUpdater
 from src.updater.skill_updater import SkillUpdater
 from src.updater.resolver import TwinEntityResolver
 
-## MAIN
+## MAIN 
+## TODO STUDENT ID IN RETRIEVAL REQUEST, API KEYS IN ENVIRONMENT, comments of removed shit like memory types
 
 def main():
     query = ""

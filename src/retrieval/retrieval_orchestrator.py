@@ -95,10 +95,10 @@ class RetrievalOrchestrator:
                 )
             )
 
-        if request.retrieve_graph:
-            evidence.extend(
-                knowledge_graph_retriever(query=request)
-            )
+        ##if request.retrieve_graph:
+          ##  evidence.extend(
+            ##    knowledge_graph_retriever(query=request)
+            ##)
 
         return evidence
 
@@ -147,7 +147,7 @@ User Query:
 """
 
         response = self.gemini.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt,
             config={
                 "response_mime_type": "application/json",
@@ -156,7 +156,7 @@ User Query:
         )
 
         plan = response.parsed
-
+        ##  STUDENT ID 
         return RetrievalRequest(
             query=query,
             top_k=plan.top_k,
