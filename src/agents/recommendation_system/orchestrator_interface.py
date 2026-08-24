@@ -2,16 +2,34 @@
 Team Beta - Recommendation Engine
 Orchestrator Integration Interface.
 
-The single entry point the Orchestrator calls. Its job is validation and
-translation only -- it never makes recommendation decisions itself.
+SIMPLEST ENTRY POINTS -- pick one:
+
+    from orchestrator_interface import recommend_text, recommend_from_briefing
+
+    text = recommend_text(briefing_string)          # STRING in, STRING out
+    data = recommend_from_briefing(briefing_string) # STRING in, DICT out
+
+Both take the ContextBuilder's prose briefing as a plain string. An internal
+LLM call extracts the learner's twin_id, goal, level, preferred format and
+preferred duration from it; everything after that point is deterministic code:
+retrieval, verification, scoring, ranking, learner history, and deep content
+analysis of the top result.
+
+Use recommend_text() when you just want something to show the learner.
+Use recommend_from_briefing() when the interface needs the individual fields --
+clickable links, score badges, a reject button. Those values cannot be
+recovered reliably from formatted text.
+
+handle_orchestrator_request() below is the full dict-based interface. It is
+what both of the above call internally, and it additionally supports recording
+learner rejections and analysing one specific chosen resource.
 
 LEARNER STATE INPUT
     The engine needs a flat dictionary of exact values it can compare with ==:
         {"twin_id": "...", "level": "beginner", "goal": "machine learning",
          "preferred_format": "video", "preferred_duration": "short"}
 
-    If the Orchestrator sends only its prose context briefing (the string from
-    ContextBuilder, written for LLM agents), a Gemini call extracts those
+    If only the prose briefing is available, a Gemini call extracts those
     fields from it -- see twin/context_extractor.py. Structured learner_state
     always wins when both are supplied: it is exact and reproducible, the
     extraction is not, and it costs no API call.
@@ -43,7 +61,9 @@ Three intents are supported:
        "learner_state": {"twin_id": "..."},
        "resource_urls": ["https://...", "https://..."]}
 
-      Permanently excludes those resources for that learner.
+      Permanently excludes those resources for that learner. Different from
+      exclude_seen, which is temporary ("show me different ones this time").
+      A rejection is forever, and survives across sessions.
 
   analyze_resource_content
       {"intent": "analyze_resource_content",
@@ -82,6 +102,136 @@ SUPPORTED_INTENTS = [INTENT_RECOMMEND, INTENT_REJECT, INTENT_ANALYZE]
 INCLUDE_CONTENT_BY_DEFAULT = True
 
 
+# ---------------------------------------------------------------------------
+# Simple entry points
+# ---------------------------------------------------------------------------
+
+def recommend_from_briefing(briefing, something_else=False, include_content=True):
+    """Takes the Orchestrator's prose briefing STRING, returns a structured dict.
+
+        response = recommend_from_briefing(briefing_string)
+
+        response["recommendations"]   -> list of resources to display
+        response["content"]           -> chapters/sections for the top one
+        response["content_for_url"]   -> which resource that content belongs to
+        response["message"]           -> show this when recommendations is empty
+
+    something_else=True means the learner asked for DIFFERENT resources than
+    they were given before: everything already shown to them is excluded, and
+    discovery searches with varied phrasings for genuinely new material.
+
+    include_content=False skips deep analysis of the top result, which makes
+    the response noticeably faster.
+
+    Never raises. A bad or empty briefing comes back as a structured error.
+    """
+    if not isinstance(briefing, str):
+        return error_response(
+            INTENT_RECOMMEND,
+            f"recommend_from_briefing expects a string, got {type(briefing).__name__}.",
+        )
+
+    if not briefing.strip():
+        return error_response(INTENT_RECOMMEND, "The briefing was empty.")
+
+    return handle_orchestrator_request({
+        "intent": INTENT_RECOMMEND,
+        "context": briefing,
+        "exclude_seen": bool(something_else),
+        "include_content": bool(include_content),
+    })
+
+
+def format_response_as_text(response):
+    """Turns the engine's structured response into readable display text.
+
+    Everything here comes from the response itself -- nothing is invented. The
+    reasons are already human-readable and generated directly from the score
+    breakdown, so they can be shown to a learner verbatim.
+    """
+    if response["status"] != "ok":
+        return f"Sorry, something went wrong: {response['message']}"
+
+    recommendations = response["recommendations"]
+    if not recommendations:
+        return response["message"]
+
+    lines = []
+    count = len(recommendations)
+    lines.append(f"Found {count} resource{'s' if count != 1 else ''} for you:")
+    lines.append("")
+
+    content = response.get("content")
+    content_url = response.get("content_for_url")
+
+    for index, record in enumerate(recommendations, start=1):
+        lines.append(f"{index}. {record['resource']}")
+        lines.append(f"   Link:  {record['url']}")
+
+        resource_type = record["format"] or "unknown type"
+        lines.append(f"   Type:  {resource_type}   |   Match: {record['score']}/100")
+
+        if record["reasons"]:
+            lines.append("   Why this one:")
+            for reason in record["reasons"]:
+                lines.append(f"     - {reason}")
+
+        # Deep analysis belongs to exactly ONE resource. Match by url, never by
+        # position -- if ranking changes, position attaches it to the wrong
+        # resource silently.
+        if content and record["url"] == content_url:
+            if content.get("access_status") == "ok":
+                chapters = content.get("chapters")
+                sections = content.get("sections")
+
+                if chapters:
+                    lines.append("")
+                    lines.append(f"   What's inside ({len(chapters)} chapters):")
+                    for chapter in chapters:
+                        lines.append(f"     [{chapter['start_time']}] {chapter['topic']}")
+                        if chapter.get("summary"):
+                            lines.append(f"          {chapter['summary']}")
+
+                elif sections:
+                    lines.append("")
+                    lines.append(f"   What's inside ({len(sections)} sections):")
+                    for section in sections:
+                        mark = "*" if section.get("relevant_to_requested_topic") else " "
+                        lines.append(f"    {mark} {section['heading']}")
+                        if section.get("summary"):
+                            lines.append(f"          {section['summary']}")
+                    lines.append("     (* = directly relevant to your goal)")
+            else:
+                lines.append(f"   Could not look inside this one: {content.get('access_status')}")
+
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def recommend_text(briefing, something_else=False, include_content=True):
+    """Same as recommend_from_briefing(), but returns READY-TO-DISPLAY TEXT.
+
+        text = recommend_text(briefing_string)
+        print(text)          # or put it straight into a GUI text area
+
+    Use this when you just want something to show the learner. If you need to
+    build interactive cards -- clickable links, score badges, a reject button
+    -- use recommend_from_briefing() instead and read the fields directly;
+    those values cannot be recovered reliably from formatted text.
+    """
+    response = recommend_from_briefing(
+        briefing,
+        something_else=something_else,
+        include_content=include_content,
+    )
+    return format_response_as_text(response)
+
+
+# ---------------------------------------------------------------------------
+# Full dict-based interface
+# ---------------------------------------------------------------------------
+
 def error_response(intent, message):
     """Every failure comes back in the same shape as a success, so the
     Orchestrator never has to branch on response structure."""
@@ -113,7 +263,8 @@ def resolve_learner_state(request):
         if extracted:
             return extracted, (
                 "learner_state was extracted from the context briefing by an LLM. "
-                "Send structured learner_state instead for faster, reproducible results."
+                "Extraction is not fully reproducible; the same briefing may "
+                "occasionally yield a different level or format."
             )
         return None, "Could not extract learner state from the context briefing; personalization is unavailable."
 
@@ -253,15 +404,7 @@ def handle_orchestrator_request(request):
 
 
 if __name__ == "__main__":
-    TEST_TWIN = "orchestrator-test-0004"
-
-    learner_state = {
-        "twin_id": TEST_TWIN,
-        "level": "beginner",
-        "goal": "machine learning",
-        "preferred_format": "video",
-        "preferred_duration": "short",
-    }
+    TEST_TWIN = "briefing-test-0001"
 
     SAMPLE_BRIEFING = f"""======================================================================
 STUDENT PROFILE & TWIN
@@ -279,69 +422,41 @@ RELEVANT MEMORIES
 The learner watched an introductory neural networks video last week.
 """
 
-    print("=== 1. Structured learner_state (preferred path, no LLM call) ===")
-    result = handle_orchestrator_request({
-        "intent": INTENT_RECOMMEND,
-        "learner_state": learner_state,
-        "user_request": "recommend some machine learning videos",
-    })
-    print(f"Status: {result['status']} | Warnings: {result['warnings']}")
-    for index, record in enumerate(result["recommendations"][:5]):
-        marker = "  <- content is for THIS one" if record["url"] == result["content_for_url"] else ""
-        print(f"  {index + 1}. {record['score']:>3} | {record['url']}{marker}")
+    print("=" * 70)
+    print("TEST 1 -- recommend_text(): STRING in, STRING out")
+    print("=" * 70)
+    print()
+    print(recommend_text(SAMPLE_BRIEFING))
 
-    content = result["content"]
-    if content and content.get("chapters"):
-        print(f"\n  {len(content['chapters'])} chapters:")
-        for chapter in content["chapters"][:4]:
-            print(f"    [{chapter['start_time']}] {chapter['topic']}")
+    print()
+    print("=" * 70)
+    print("TEST 2 -- recommend_from_briefing(): STRING in, DICT out")
+    print("=" * 70)
+    response = recommend_from_briefing(SAMPLE_BRIEFING, include_content=False)
+    print(f"Status: {response['status']} | {response['message']}")
+    for index, record in enumerate(response["recommendations"][:5], start=1):
+        print(f"  {index}. {record['score']:>3} | {record['url']}")
+    print(f"  Warnings: {response['warnings']}")
 
-    print("\n=== 2. Context briefing only (LLM extraction path) ===")
-    from_context = handle_orchestrator_request({
-        "intent": INTENT_RECOMMEND,
-        "context": SAMPLE_BRIEFING,
-        "include_content": False,
-    })
-    print(f"Status: {from_context['status']}")
-    print(f"Warnings: {from_context['warnings']}")
-    for record in from_context["recommendations"][:3]:
-        print(f"  {record['score']:>3} | {record['url']}")
+    print()
+    print("=" * 70)
+    print("TEST 3 -- same briefing twice should be IDENTICAL")
+    print("=" * 70)
+    again = recommend_from_briefing(SAMPLE_BRIEFING, include_content=False)
+    first_urls = [r["url"] for r in response["recommendations"]]
+    again_urls = [r["url"] for r in again["recommendations"]]
+    print(f"Identical: {first_urls == again_urls}  <- should be True")
 
-    print("\n=== 3. Both supplied -- structured must win, no extraction ===")
-    both = handle_orchestrator_request({
-        "intent": INTENT_RECOMMEND,
-        "learner_state": learner_state,
-        "context": SAMPLE_BRIEFING,
-        "include_content": False,
-    })
-    extracted_warning = any("extracted from the context" in w for w in both["warnings"])
-    print(f"Extraction happened: {extracted_warning}  <- should be False")
+    print()
+    print("=" * 70)
+    print("TEST 4 -- 'recommend something else'")
+    print("=" * 70)
+    different = recommend_text(SAMPLE_BRIEFING, something_else=True, include_content=False)
+    print(different)
 
-    print("\n=== 4. Rejecting the top resource ===")
-    if result["recommendations"]:
-        rejected = handle_orchestrator_request({
-            "intent": INTENT_REJECT,
-            "learner_state": {"twin_id": TEST_TWIN},
-            "resource_urls": [result["recommendations"][0]["url"]],
-        })
-        print(rejected["message"])
-
-    print("\n=== 5. Asking again -- rejected one gone, new top analyzed ===")
-    after = handle_orchestrator_request({
-        "intent": INTENT_RECOMMEND,
-        "learner_state": learner_state,
-    })
-    old_top = result["recommendations"][0]["url"] if result["recommendations"] else None
-    new_urls = [r["url"] for r in after["recommendations"]]
-    print(f"Rejected resource still present: {old_top in new_urls}  <- should be False")
-    print(f"Content now for: {after['content_for_url']}")
-
-    print("\n=== 6. Neither learner_state nor context ===")
-    empty = handle_orchestrator_request({
-        "intent": INTENT_RECOMMEND,
-        "include_content": False,
-    })
-    print(f"Status: {empty['status']} | Warnings: {empty['warnings']}")
-
-    print("\n=== 7. Unsupported intent ===")
-    print(handle_orchestrator_request({"intent": "study_schedule_planning"})["message"])
+    print()
+    print("=" * 70)
+    print("TEST 5 -- bad input handled cleanly")
+    print("=" * 70)
+    print(f"Empty string:  {recommend_text('')}")
+    print(f"Wrong type:    {recommend_text({'not': 'a string'})}")
