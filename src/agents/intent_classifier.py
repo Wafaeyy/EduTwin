@@ -17,7 +17,7 @@ class IntentClassifier:
 
     def __init__(
         self,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.6-flash",
         client: genai.Client | None = None,
         api_key: str | None = None,
     ):
