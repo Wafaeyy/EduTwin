@@ -1,106 +1,99 @@
 """
-The (mocked) verified resource catalog and the code that queries it.
+The resource catalog: the single gatekeeper between the pipeline and stored
+resources.
 
-Later, MOCK_RESOURCE_DATABASE gets replaced by a real database. Nothing
-outside this module should ever touch the raw data directly -- everything
-goes through retrieve_from_database().
+Loads from the real PostgreSQL database (Supabase) on first use. If the
+database cannot be reached, falls back to SEED_RESOURCES in memory so the
+program still runs -- degraded, but honest about it.
 
-NOTE: URLs here are real, live pages (mostly Wikipedia, for stability) so
-the real network-based Verification Gate has something genuine to check.
-"Broken Link Example" deliberately points to a URL that does not exist, to
-prove the Verification Gate correctly rejects it. Several formats are
-represented (video, book, research paper, practice platform, article) to
-show the engine isn't limited to any single content type.
+SEED_RESOURCES is deliberately EMPTY. The engine now sources everything from
+the real database, populated by real internet discovery. The seeding
+mechanism is kept intact so a starting catalog can be dropped back in later
+(e.g. a curated list from the team) without any code change.
+
+Nothing outside this module should touch the resource list directly. Use
+get_all_resources(), retrieve_from_database(), or add_resources().
 """
 
-from models.resource import Resource
+from database.persistence import load_resources, save_resources, count_resources
 
-MOCK_RESOURCE_DATABASE = [
-    Resource(
-        title="Machine Learning for Absolute Beginners",
-        url="https://en.wikipedia.org/wiki/Machine_learning",
-        description="A short beginner-friendly video introduction to machine learning.",
-        topic="machine learning",
-        difficulty="beginner",
-        format="video",
-        duration="short",
-    ),
-    Resource(
-        title="Deep Learning Specialization",
-        url="https://en.wikipedia.org/wiki/Deep_learning",
-        description="A long, in-depth advanced course on deep learning.",
-        topic="machine learning",
-        difficulty="advanced",
-        format="video",
-        duration="long",
-    ),
-    Resource(
-        title="Introduction to Data Structures",
-        url="https://en.wikipedia.org/wiki/Data_structure",
-        description="A beginner article about data structures.",
-        topic="data structures",
-        difficulty="beginner",
-        format="article",
-        duration="short",
-    ),
-    Resource(
-        title="Pattern Recognition and Machine Learning (textbook)",
-        url="https://en.wikipedia.org/wiki/Pattern_recognition",
-        description="A foundational machine learning textbook covering statistical pattern recognition.",
-        topic="machine learning",
-        difficulty="advanced",
-        format="book",
-        duration="long",
-    ),
-    Resource(
-        title="Attention Is All You Need (research paper)",
-        url="https://en.wikipedia.org/wiki/Attention_(machine_learning)",
-        description="The paper introducing the transformer architecture, foundational to modern machine learning.",
-        topic="machine learning",
-        difficulty="advanced",
-        format="research_paper",
-        duration="medium",
-    ),
-    Resource(
-        title="LeetCode - Practice Coding Problems",
-        url="https://en.wikipedia.org/wiki/LeetCode",
-        description="A practice platform with coding and algorithm problems, commonly used for data structures practice.",
-        topic="data structures",
-        difficulty="intermediate",
-        format="practice_platform",
-        duration="short",
-    ),
-    Resource(
-        title="Broken Link Example",
-        url="https://en.wikipedia.org/wiki/This_page_definitely_does_not_exist_xyz123",
-        description="A deliberately broken URL, used to prove the Verification Gate rejects dead links.",
-        topic="machine learning",
-        difficulty="beginner",
-        format="video",
-        duration="short",
-    ),
-]
+
+# Deliberately empty -- see module docstring. Add Resource objects here to
+# pre-populate an empty database on first run.
+SEED_RESOURCES = []
+
+
+# Module-level state. Filled in on first use, then reused for the rest of the run.
+_resource_cache = None
+_database_available = False
+
+
+def _load_cache():
+    """Fills the cache. Called automatically on first use; does nothing after."""
+    global _resource_cache, _database_available
+
+    if _resource_cache is not None:
+        return
+
+    try:
+        existing_count = count_resources()
+
+        if existing_count == 0 and SEED_RESOURCES:
+            print(f"[resource store] Database is empty; seeding {len(SEED_RESOURCES)} starting resources.")
+            save_resources(SEED_RESOURCES)
+
+        _resource_cache = load_resources()
+        _database_available = True
+
+        if _resource_cache:
+            print(f"[resource store] Loaded {len(_resource_cache)} resource(s) from PostgreSQL.")
+        else:
+            print("[resource store] Catalog is empty; retrieval will fall through to internet discovery.")
+
+    except Exception as error:
+        print(f"[resource store] Database unavailable ({error}); using the in-memory seed list instead.")
+        _resource_cache = list(SEED_RESOURCES)
+        _database_available = False
+
+
+def get_all_resources():
+    """Returns every known resource. The only way to read the catalog."""
+    _load_cache()
+    return _resource_cache
+
+
+def add_resources(resources):
+    """Adds newly discovered resources to the catalog.
+
+    Saves them to PostgreSQL (duplicate urls are skipped by the database) and
+    adds them to the in-memory cache so the rest of this run sees them
+    immediately. Returns the number genuinely new to the database.
+    """
+    _load_cache()
+
+    if not resources:
+        return 0
+
+    saved_count = 0
+    if _database_available:
+        try:
+            saved_count = save_resources(resources)
+        except Exception as error:
+            print(f"[resource store] Could not save discovered resources ({error}); keeping them in memory only.")
+
+    known_urls = {resource.url for resource in _resource_cache}
+    for resource in resources:
+        if resource.url not in known_urls:
+            _resource_cache.append(resource)
+            known_urls.add(resource.url)
+
+    return saved_count
 
 
 def retrieve_from_database(search_requirement):
-    """
-    Looks through the mock resource database and returns resources whose
-    topic and difficulty level match the search requirement.
-
-    If the search requirement doesn't specify a topic or level, we don't
-    filter on that field at all (Scenario A/B support). Format is NOT used
-    to filter here -- it's a scoring/ranking factor (Section 17), not a
-    hard requirement, so resources of every format stay eligible.
-
-    Args:
-        search_requirement (dict): output of build_search_requirement().
-
-    Returns:
-        list: matching Resource objects.
-    """
+    """Filters the catalog by topic and level. None means 'no constraint'."""
     matches = []
-
-    for resource in MOCK_RESOURCE_DATABASE:
+    for resource in get_all_resources():
         topic_matches = (
             search_requirement["topic"] is None
             or resource.topic == search_requirement["topic"]
@@ -109,8 +102,6 @@ def retrieve_from_database(search_requirement):
             search_requirement["level"] is None
             or resource.difficulty == search_requirement["level"]
         )
-
         if topic_matches and level_matches:
             matches.append(resource)
-
     return matches
