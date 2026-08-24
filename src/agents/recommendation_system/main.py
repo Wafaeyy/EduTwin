@@ -20,6 +20,17 @@ from src.agents.recommendation_system.database.persistence import (
     load_analysis,
 )
 
+# How many resources the learner actually receives.
+#
+# Tier 1 returns EVERYTHING matching, and the catalogue grows with every
+# discovery run -- real runs returned 12 and then 26 resources, which is a
+# search results page, not a recommendation.
+#
+# Capping here also protects the history. Only what the learner SAW may be
+# recorded as shown; recording 26 when they saw 5 would wrongly exclude 21
+# good resources from every future request.
+MAX_RECOMMENDATIONS = 5
+
 
 def load_history(twin_id, exclude_seen_resources):
     """Returns the urls to exclude for this learner.
@@ -42,7 +53,11 @@ def load_history(twin_id, exclude_seen_resources):
 
 
 def save_history(twin_id, recommendations):
-    """Records what we just showed, so it can be excluded next time."""
+    """Records what we just showed, so it can be excluded next time.
+
+    Must be called with the FINAL, capped list. Recording resources the
+    learner never saw would silently exclude them from future requests.
+    """
     if not twin_id or not recommendations:
         return
 
@@ -53,7 +68,7 @@ def save_history(twin_id, recommendations):
         print(f"[history] Could not record shown resources ({error}); continuing.")
 
 
-def get_recommendations(raw_learner, exclude_seen_resources=False):
+def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_RECOMMENDATIONS):
     """Full pipeline. Set exclude_seen_resources=True when the learner asks
     for DIFFERENT resources than they were given before."""
     learner = normalize_learner_state(raw_learner)
@@ -73,7 +88,13 @@ def get_recommendations(raw_learner, exclude_seen_resources=False):
             "message": "No new resources were found for this learner. They may have seen everything available on this topic.",
         }
 
-    recommendations = recommend(learner, verified_resources)
+    ranked = recommend(learner, verified_resources)
+
+    # Cap BEFORE recording history -- see save_history().
+    recommendations = ranked[:limit]
+    if len(ranked) > len(recommendations):
+        print(f"[recommendation] {len(ranked)} matched; returning the top {len(recommendations)}.")
+
     save_history(twin_id, recommendations)
 
     return {"recommendations": recommendations, "message": "OK"}
@@ -126,6 +147,10 @@ def analyze_single_resource(resource_url, resource_format=None, topic=None, use_
     if resource_format is None:
         resource_format = infer_format_from_url(resource_url)
 
+    # A playlist is many videos, so it has no single transcript to analyse.
+    if resource_format == "playlist":
+        return {"access_status": "This is a playlist of many videos, not a single video, so it cannot be analysed."}
+
     if resource_format == "video":
         analysis = analyze_video_content(resource_url)
         analysis_type = "video"
@@ -148,7 +173,7 @@ def analyze_single_resource(resource_url, resource_format=None, topic=None, use_
     return analysis
 
 
-def get_recommendation_with_content(raw_learner, exclude_seen_resources=False):
+def get_recommendation_with_content(raw_learner, exclude_seen_resources=False, limit=MAX_RECOMMENDATIONS):
     """
     Runs the full recommendation pipeline, then analyses ONLY the top-ranked
     resource.
@@ -156,7 +181,11 @@ def get_recommendation_with_content(raw_learner, exclude_seen_resources=False):
     Mostly superseded by analyze_single_resource(), which lets the learner
     pick which resource to look into. Kept for interfaces without buttons.
     """
-    result = get_recommendations(raw_learner, exclude_seen_resources=exclude_seen_resources)
+    result = get_recommendations(
+        raw_learner,
+        exclude_seen_resources=exclude_seen_resources,
+        limit=limit,
+    )
 
     if not result["recommendations"]:
         result["top_resource_content"] = None
@@ -200,6 +229,7 @@ if __name__ == "__main__":
 
     print("=== FIRST REQUEST ===")
     first = get_recommendations(learner)
+    print(f"Returned {len(first['recommendations'])} resource(s).")
     for record in first["recommendations"]:
         print_recommendation(record, detailed=False)
 
@@ -212,6 +242,7 @@ if __name__ == "__main__":
     print("\n\n=== THIRD REQUEST: 'recommend something else' ===")
     third = get_recommendations(learner, exclude_seen_resources=True)
     print(f"Message: {third['message']}")
+    print(f"Returned {len(third['recommendations'])} resource(s).")
     for record in third["recommendations"]:
         print_recommendation(record, detailed=False)
 
