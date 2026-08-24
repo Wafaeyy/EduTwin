@@ -24,6 +24,7 @@ def main():
     retrieval_orchestrator = RetrievalOrchestrator(memory_retriever= memory_retriever, twin_retriever= twin_retriever)
     brief = context_builder.build(retrieval_orchestrator.retrieve(query= query, student= twin))
     ##send brief to agent
+    ##agent_answer = agent(brief)
     memory_decision = MemoryDecision(memory_store= memory_store)
     memory = memory_decision.process_interaction(user_message= query, assistant_message= agent_answer)
     interest_updater = InterestUpdater()
