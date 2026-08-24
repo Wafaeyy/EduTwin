@@ -10,7 +10,6 @@ import os
 from dotenv import load_dotenv,find_dotenv
 from typing import Optional
 
-#load_dotenv(find_dotenv(),override=True)
 
 
 import time
@@ -20,12 +19,13 @@ from google.genai.errors import ClientError
 
 
 
-
-
+load_dotenv(find_dotenv(), override=True)
 
 api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+if not api_key:
+    raise RuntimeError("GEMINI_API_KEY not set. Please set it in your environment or .env file.")
 
+client = genai.Client(api_key=api_key)
 
 
 def safe_generate_content(model: str, contents: str, config: dict = None):
@@ -151,20 +151,15 @@ class SingleConcept(BaseModel):
 class MutliConcept(BaseModel):
     concepts: list[SingleConcept]
     
-def extract_concept(content :str)->dict[str , str]:
+def extract_concept(content :str)->list[dict[str, str]]:
 
     prompt = f"""Extract the main educational concept from the user's message.
 
     Rules:
     - Return only the canonical educational concept.
     - Do not explain.
-    - Return JSON only.
 
-    Example:
-    {{
-        "concept": "Cooking",
-        "description" : "the act of making food"
-    }}
+
 
     User message:
     {content}"""
@@ -204,15 +199,17 @@ def cosine_similarity(a,b):
             return 0.0
         similarity = dot_product / (norm_a * norm_b)
         return similarity
-
+    
+def embed_key(name: str) -> str:
+    return f"Educational concept: {name}"
 
 HIGH_THRESHOLD = 0.92
 LOW_THRESHOLD  = 0.80
-def search_node (name:str, description:str, create:bool,precomputed_embed: Optional[list[float]] = None):
+def search_node (name:str, description:str, create:bool,precomputed_embed: Optional[list[float]] = None,depth: int = 1):
     
    
     
-    embed = precomputed_embed if precomputed_embed is not None else get_embedding( f"Title: {name}\nDescription: {description}")
+    embed = precomputed_embed if precomputed_embed is not None else get_embedding( f"Educational concept: {name}")
     highestSimi=-1
     node_highest=None
     if len(G.nodes) == 0:
@@ -222,17 +219,19 @@ def search_node (name:str, description:str, create:bool,precomputed_embed: Optio
             return name
         return None
     
-    canidates=[]
+    candidates=[]
 
     for n in G.nodes:
         similarity=cosine_similarity(embed,G.nodes[n]["knowledgeNode"].embedding)
-        canidates.append((n,similarity))
+        candidates.append((n,similarity))
         #if highestSimi<similarity: 
         #    highestSimi=similarity
         #    node_highest = n
-    canidates.sort(key=lambda x:x[1],reverse=True)
+    candidates.sort(key=lambda x:x[1],reverse=True)
+    
+    node_highest, highestSimi = candidates[0] 
     print("search_node(", name, ", create=", create, ")",highestSimi)
-    node_highest, highestSimi =canidates[0] 
+    
     
     print(
     f"highest={highestSimi:.6f}, "
@@ -246,7 +245,7 @@ def search_node (name:str, description:str, create:bool,precomputed_embed: Optio
         return node_highest   
     
     
-    for cani_node,cani_simi in canidates:
+    for cani_node,cani_simi in candidates:
         if cani_simi< LOW_THRESHOLD :
             break
         print("LOW -> asking LLM")
@@ -269,7 +268,7 @@ def search_node (name:str, description:str, create:bool,precomputed_embed: Optio
         create_node(name=name, description=description,embedding=embed)
         add_prerequisites(name=name, description=description)
         return name
-    return
+    return None
 
 
     #node = knowledgeNode(knowledge=Knowledge(),embedding=embed)
@@ -281,8 +280,22 @@ def create_node(name: str, description: str, embedding: list[float]):
         name,
         knowledgeNode=kn,
     )
+    
+    
+def add_edge_safe(prereq: str, concept: str) -> bool:
+    if prereq == concept:
+        return False
+    if prereq not in G or concept not in G:
+        return False
+    if nx.has_path(G, concept, prereq):   # Rejects backwards paths that close cycles
+        return False
+    G.add_edge(prereq, concept)
+    return True
 
-def add_prerequisites(name,description):
+
+def add_prerequisites(name: str, description: str, depth: int = 1, max_nodes: int = 200):
+    if depth <= 0 or len(G.nodes) >= max_nodes:
+        return
     listprere=get_prerequisites(
         concept=name,
         description=description
@@ -292,7 +305,7 @@ def add_prerequisites(name,description):
     print(listprere)
 
     for p in listprere:
-        n = search_node(p,"",False)
+        n = search_node(p,"",create = True,depth= depth-1)
 
         print(
             "Searching prerequisite:",
@@ -301,8 +314,8 @@ def add_prerequisites(name,description):
             n
         )
 
-        if n != None:
-            G.add_edge(n,name)
+        if n is not None:
+            add_edge_safe(n,name)
 #def add_prerequisites(name,description):
 #    listprere=get_prerequisites(concept=name , description=description)
 #    for p in listprere:
