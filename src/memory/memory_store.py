@@ -80,7 +80,8 @@ class MemoryStore:
             documents=[document],
             embeddings=[embedding],
             metadatas=[{
-                "affected_components": memory.affected_components,
+                "affected_components":  [component.value
+        for component in memory.affected_components],
                 "importance": memory.importance,
                 "archived": False,
                 "created_at": memory.created_at.isoformat()

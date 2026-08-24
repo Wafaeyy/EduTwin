@@ -94,6 +94,7 @@ class TwinRetriever:
         )
 
         return Evidence(
+            reference_id= student.twin_id,
             source=EvidenceSource.TWIN,
             content=content,
             score=1.0,

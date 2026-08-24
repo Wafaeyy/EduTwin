@@ -3,7 +3,7 @@ The Recommendation Engine itself: builds a decision record for every
 verified resource and ranks them best-to-worst.
 """
 
-from explanation.decision import create_decision_record
+from src.agents.recommendation_system.explanation.decision import create_decision_record
 
 
 def recommend(learner, resources):

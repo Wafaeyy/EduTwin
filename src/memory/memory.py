@@ -15,14 +15,13 @@ Can separating immutable interaction memories from learner beliefs
 improve explainability and long-term personalization?
 """
 
-from datetime import datetime
-from enum import Enum
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-from twin.enums import TwinComponent
+from src.twin.enums import TwinComponent
 
 class Memory(BaseModel):
     """
@@ -66,6 +65,5 @@ class Memory(BaseModel):
     )
 
     created_at: datetime = Field(
-        default_factory=datetime.now,
-        description="Timestamp when the memory occurred."
-    )
+    default_factory=lambda: datetime.now(timezone.utc)
+)

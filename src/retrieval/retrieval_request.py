@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from src.memory.memory import MemoryType
+##from src.memory.memory import MemoryType
 
 
 class TimeRange(BaseModel):
@@ -32,9 +32,9 @@ class RetrievalRequest(BaseModel):
     - Optional constraints on the retrieval process.
     """
 
-    student_id: UUID = Field(
-        description="Unique identifier of the student."
-    )
+    ##student_id: UUID = Field(
+    ##    description="Unique identifier of the student."
+    ##)
 
     query: str = Field(
         min_length=1,
@@ -53,25 +53,25 @@ class RetrievalRequest(BaseModel):
         description="Maximum token budget for the final retrieval context."
     )
 
-    include_memory: bool = Field(
+    retrieve_memory: bool = Field(
         default=True,
         description="Whether the MemoryRetriever should be used."
     )
 
-    include_twin: bool = Field(
+    retrieve_twin: bool = Field(
         default=True,
         description="Whether the TwinRetriever should be used."
     )
 
-    include_graph: bool = Field(
+    retrieve_graph: bool = Field(
         default=True,
         description="Whether the GraphRetriever should be used."
     )
 
-    memory_types: list[MemoryType] | None = Field(
-        default=None,
-        description="Optional memory types to restrict memory retrieval."
-    )
+   ## memory_types: list[MemoryType] | None = Field(
+    ##    default=None,
+    ##    description="Optional memory types to restrict memory retrieval."
+    ##)
 
     time_range: TimeRange | None = Field(
         default=None,

@@ -20,6 +20,7 @@ KNOWN_FORMATS = [
 KNOWN_DURATIONS = ["short", "medium", "long"]
 
 FIELD_ALIASES = {
+    "twin_id": ["twin_id", "learner_id", "student_id", "id"],
     "level": ["level", "current_skill_level", "skill_level"],
     "goal": ["goal", "learning_goal", "objective"],
     "preferred_format": ["preferred_format", "format_preference"],
