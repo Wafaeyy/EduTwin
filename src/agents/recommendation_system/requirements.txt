@@ -1,4 +1,8 @@
 
-Install sentence-transformers to run #this for the semantic embbiding
+Install sentence-transformers  #this for the semantic embbiding
 install requests #this for verification
 install duckduckgo_search (ddgs) #this for resource retrival discovery
+google-genai # for extraction
+youtube-transcript-api #for extraction videos
+py -m pip install beautifulsoup4 pypdf #for extraction pdfs
+install psycopg2-binary # for database

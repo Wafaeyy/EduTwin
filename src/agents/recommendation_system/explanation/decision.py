@@ -40,6 +40,8 @@ def create_decision_record(learner, resource):
     decision_record = {
         "resource": resource.title,
         "score": score,
+        "url": resource.url,
+        "format": resource.format,
         "score_breakdown": breakdown,
         "reasons": reasons,
         "personalization_confidence": confidence,
