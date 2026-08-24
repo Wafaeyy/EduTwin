@@ -71,7 +71,7 @@ class YesNoResponse(BaseModel):
     
 def ask_yes_no (question:str)-> bool:
     response =safe_generate_content(# client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3.6-flash",
         contents=question,
         config={
             "response_mime_type":"application/json",
@@ -87,7 +87,7 @@ class prerequisites (BaseModel):
     
 def get_prerequisites(concept:str , description :str)->  list[str]:
     response= safe_generate_content(#client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3.6-flash",
         contents=f"""You are an educational knowledge graph assistant.
             
             Given the concept below, identify the essential prerequisite concepts that someone should understand before learning it.
@@ -133,12 +133,17 @@ class KnowledgeNode:
         # Normalized variance-based confidence: ranges smoothly from 0.0 to 1.0 as variance approaches zero
         self.knowledge.confidence = max(0.0, min(1.0, 1.0 - (8.0 * variance)))
 
+EMBEDDING_CACHE = {}
+
 def get_embedding (content :str) -> list[float]:
+    if content in EMBEDDING_CACHE:
+        return EMBEDDING_CACHE[content]
     result = safe_embed_content(#client.models.embed_content(
-    model="gemini-embedding-001",
+        model="gemini-embedding-001",
         contents=content
     )
-
+    
+    EMBEDDING_CACHE[content] = embedding
     embedding =result.embeddings[0].values
     return embedding
 
@@ -164,7 +169,7 @@ def extract_concept(content :str)->list[dict[str, str]]:
     User message:
     {content}"""
     response =safe_generate_content(# client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3.6-flash",
         contents=prompt,
         config={"response_mime_type":"application/json",
                 "response_schema":MutliConcept}
@@ -205,11 +210,9 @@ def embed_key(name: str) -> str:
 
 HIGH_THRESHOLD = 0.92
 LOW_THRESHOLD  = 0.80
-def search_node (name:str, description:str, create:bool,precomputed_embed: Optional[list[float]] = None,depth: int = 1):
+def search_node (name:str, description:str, create:bool,depth: int = 1):
     
-   
-    
-    embed = precomputed_embed if precomputed_embed is not None else get_embedding( f"Educational concept: {name}")
+    embed = get_embedding( f"Educational concept: {name}")
     highestSimi=-1
     node_highest=None
     if len(G.nodes) == 0:
@@ -257,13 +260,7 @@ def search_node (name:str, description:str, create:bool,precomputed_embed: Optio
             """
         if ask_yes_no(question=q):
             return cani_node
-        #else:
-        #    print("CREATE/NONE")
-        #    if create:
-        #        create_node(name=name, description=description,embedding=embed)
-        #        add_prerequisites(name=name, description=description)
-        #        return name
-        #    return 
+
     if create:
         create_node(name=name, description=description,embedding=embed)
         add_prerequisites(name=name, description=description)
