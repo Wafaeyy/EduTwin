@@ -5,9 +5,8 @@ def main():
     service = EduTwinService()
 
     result = service.process_message(
-        "Recommend something useful for me to learn about artificial intelligence."
+        "recommend a cooking videos"
     )
-
     print("\n========== ANSWER ==========\n")
     print(result["answer"])
 
