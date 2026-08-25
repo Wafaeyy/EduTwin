@@ -4,6 +4,7 @@ Main pipeline: wires every module together.
 """
 
 from src.agents.recommendation_system.twin.mock_twin import get_relevant_digital_twin_state, normalize_learner_state
+from src.agents.recommendation_system.twin.request_extractor import extract_request
 from src.agents.recommendation_system.retrieval.search_requirement import build_search_requirement
 from src.agents.recommendation_system.retrieval.retriever import retrieve_with_fallback
 from src.agents.recommendation_system.verification.verifier import verify_resources
@@ -30,6 +31,52 @@ from src.agents.recommendation_system.database.persistence import (
 # recorded as shown; recording 26 when they saw 5 would wrongly exclude 21
 # good resources from every future request.
 MAX_RECOMMENDATIONS = 5
+
+
+def apply_request(learner, user_request):
+    """Overlays what the learner asked for RIGHT NOW onto their stored state.
+
+    The rule: THE REQUEST WINS, MEMORY FILLS THE GAPS.
+
+    A learner whose stored goal is "artificial intelligence" can still ask
+    about calculus today, and the engine must search for calculus. But if they
+    just say "recommend something", their stored goal and preferences are
+    exactly what should be used.
+
+    So each field is taken from the request when the message states it, and
+    from the Digital Twin when it does not.
+
+    Returns (learner, notes) -- notes lists what the request overrode, so the
+    response can say so rather than silently ignoring the learner's goal.
+    """
+    notes = []
+
+    if not user_request or not user_request.strip():
+        return learner, notes
+
+    requested = extract_request(user_request)
+    if not requested:
+        return learner, notes
+
+    # topic -> goal. The most important override: it decides what we search for.
+    if requested.get("topic"):
+        if learner.get("goal") and requested["topic"] != learner["goal"]:
+            notes.append(
+                f"Searching for '{requested['topic']}' as requested, "
+                f"rather than the stored goal '{learner['goal']}'."
+            )
+        learner["goal"] = requested["topic"]
+
+    if requested.get("format"):
+        learner["preferred_format"] = requested["format"]
+
+    if requested.get("level"):
+        learner["level"] = requested["level"]
+
+    if requested.get("duration"):
+        learner["preferred_duration"] = requested["duration"]
+
+    return learner, notes
 
 
 def load_history(twin_id, exclude_seen_resources):
@@ -68,11 +115,21 @@ def save_history(twin_id, recommendations):
         print(f"[history] Could not record shown resources ({error}); continuing.")
 
 
-def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_RECOMMENDATIONS):
-    """Full pipeline. Set exclude_seen_resources=True when the learner asks
-    for DIFFERENT resources than they were given before."""
+def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_RECOMMENDATIONS,
+                        user_request=None):
+    """Full pipeline.
+
+    user_request is what the learner typed. Anything it explicitly asks for
+    overrides the stored Digital Twin state; anything it leaves unsaid falls
+    back to the Twin. See apply_request().
+
+    Set exclude_seen_resources=True when the learner asks for DIFFERENT
+    resources than they were given before.
+    """
     learner = normalize_learner_state(raw_learner)
     twin_id = learner.get("twin_id")
+
+    learner, request_notes = apply_request(learner, user_request)
 
     seen_urls = load_history(twin_id, exclude_seen_resources)
     if seen_urls:
@@ -86,6 +143,7 @@ def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_REC
         return {
             "recommendations": [],
             "message": "No new resources were found for this learner. They may have seen everything available on this topic.",
+            "notes": request_notes,
         }
 
     ranked = recommend(learner, verified_resources)
@@ -97,7 +155,7 @@ def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_REC
 
     save_history(twin_id, recommendations)
 
-    return {"recommendations": recommendations, "message": "OK"}
+    return {"recommendations": recommendations, "message": "OK", "notes": request_notes}
 
 
 def reject_recommendations(raw_learner, resource_urls):
@@ -173,7 +231,8 @@ def analyze_single_resource(resource_url, resource_format=None, topic=None, use_
     return analysis
 
 
-def get_recommendation_with_content(raw_learner, exclude_seen_resources=False, limit=MAX_RECOMMENDATIONS):
+def get_recommendation_with_content(raw_learner, exclude_seen_resources=False,
+                                    limit=MAX_RECOMMENDATIONS, user_request=None):
     """
     Runs the full recommendation pipeline, then analyses ONLY the top-ranked
     resource.
@@ -185,6 +244,7 @@ def get_recommendation_with_content(raw_learner, exclude_seen_resources=False, l
         raw_learner,
         exclude_seen_resources=exclude_seen_resources,
         limit=limit,
+        user_request=user_request,
     )
 
     if not result["recommendations"]:
@@ -192,7 +252,11 @@ def get_recommendation_with_content(raw_learner, exclude_seen_resources=False, l
         return result
 
     top_recommendation = result["recommendations"][0]
+
+    # Analyse against the topic actually searched for, which may be the
+    # request's topic rather than the stored goal.
     learner = normalize_learner_state(raw_learner)
+    learner, _ = apply_request(learner, user_request)
 
     result["top_resource_content"] = analyze_single_resource(
         top_recommendation["url"],
@@ -226,26 +290,30 @@ def print_recommendation(record, detailed=True):
 
 if __name__ == "__main__":
     learner = get_relevant_digital_twin_state()
+    print(f"Stored Twin state: goal={learner['goal']!r}, format={learner['preferred_format']!r}, "
+          f"level={learner['level']!r}, duration={learner['preferred_duration']!r}")
 
-    print("=== FIRST REQUEST ===")
-    first = get_recommendations(learner)
-    print(f"Returned {len(first['recommendations'])} resource(s).")
-    for record in first["recommendations"]:
-        print_recommendation(record, detailed=False)
+    print("\n\n=== 1. No request -- uses the stored goal ===")
+    result = get_recommendations(learner)
+    print(f"Returned {len(result['recommendations'])} resource(s).")
+    for record in result["recommendations"][:3]:
+        print(f"  {record['score']:>3} | {record['url']}")
 
-    print("\n\n=== SECOND REQUEST, same question (should be IDENTICAL) ===")
-    second = get_recommendations(learner)
-    first_urls = [r["url"] for r in first["recommendations"]]
-    second_urls = [r["url"] for r in second["recommendations"]]
-    print(f"Identical: {first_urls == second_urls}  <- should be True (reproducible)")
+    print("\n\n=== 2. Request names a DIFFERENT topic ===")
+    result = get_recommendations(learner, user_request="recommend videos about calculus")
+    print(f"Notes: {result['notes']}")
+    print(f"Returned {len(result['recommendations'])} resource(s).")
+    for record in result["recommendations"][:3]:
+        print(f"  {record['score']:>3} | {record['url']}")
 
-    print("\n\n=== THIRD REQUEST: 'recommend something else' ===")
-    third = get_recommendations(learner, exclude_seen_resources=True)
-    print(f"Message: {third['message']}")
-    print(f"Returned {len(third['recommendations'])} resource(s).")
-    for record in third["recommendations"]:
-        print_recommendation(record, detailed=False)
+    print("\n\n=== 3. Request names topic AND format ===")
+    result = get_recommendations(learner, user_request="I want to read articles about linear algebra")
+    print(f"Notes: {result['notes']}")
+    print(f"Returned {len(result['recommendations'])} resource(s).")
+    for record in result["recommendations"][:3]:
+        print(f"  {str(record['format']):<14} {record['score']:>3} | {record['url']}")
 
-    third_urls = [r["url"] for r in third["recommendations"]]
-    overlap = set(first_urls) & set(third_urls)
-    print(f"\nOverlap with first request: {len(overlap)}  <- should be 0 (genuinely new)")
+    print("\n\n=== 4. Vague request -- falls back to stored state ===")
+    result = get_recommendations(learner, user_request="recommend something for me")
+    print(f"Notes: {result['notes']}  <- should be empty")
+    print(f"Returned {len(result['recommendations'])} resource(s).")
