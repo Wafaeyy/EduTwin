@@ -14,9 +14,7 @@ from src.updater.resolver import TwinEntityResolver
 from src.twin.profile import Profile
 from src.twin.enums import EducationStage
 
-from src.agents.recommendation_system.orchestrator_interface import (
-    recommend_text,
-)
+from src.agents import AgentOrchestrator
 
 class EduTwinService:
 
@@ -72,6 +70,8 @@ class EduTwinService:
         self.resolver = TwinEntityResolver(
             twin_store=self.twin_store
         )
+        
+        self.agent_orchestrator = AgentOrchestrator()
 
     def process_message(self, query: str):
         """
@@ -120,7 +120,8 @@ class EduTwinService:
         # agent_answer = agent(brief)
         #
 
-        agent_answer = recommend_text(briefing= brief)
+        agent_result = self.agent_orchestrator.process(query=query, brief=brief, twin=self.twin)
+        agent_answer = agent_result.reply
         
         # -----------------------------------------
         # 4. Decide whether interaction becomes

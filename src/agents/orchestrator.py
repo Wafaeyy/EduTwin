@@ -125,17 +125,47 @@ class AgentOrchestrator:
         target_agent = intent_decision.agent
         intent = intent_decision.intent
 
-        # Step 2 & 3: Route and execute the appropriate agent
-        if target_agent == AgentType.STUDY_COACH:
-            return self._run_coach(query, intent, brief, history)
+        # Normalize target_agent if it's a string
+        if isinstance(target_agent, str):
+            clean = target_agent.strip().lower().replace(" ", "_").replace("-", "_")
+            if "career" in clean or "mentor" in clean or "job" in clean:
+                target_agent = AgentType.CAREER_MENTOR
+            elif "coach" in clean or "tutor" in clean or "study" in clean:
+                target_agent = AgentType.STUDY_COACH
+            elif "recommend" in clean or "resource" in clean:
+                target_agent = AgentType.RECOMMENDATION_SYSTEM
+            elif "explain" in clean:
+                target_agent = AgentType.EXPLAINABILITY
+            else:
+                for agent_enum in AgentType:
+                    if agent_enum.value == clean or agent_enum.name.lower() == clean:
+                        target_agent = agent_enum
+                        break
 
-        elif target_agent == AgentType.CAREER_MENTOR:
-            # Determine role from twin or argument or default
-            target_role = role or "machine_learning_engineer"
-            if twin and hasattr(twin, "goals") and twin.goals:
+        print(f"[Orchestrator] Routed query to: {target_agent.value} (intent: {intent})")
+
+        # Step 2 & 3: Route and execute the appropriate agent
+        if target_agent == AgentType.CAREER_MENTOR:
+            # Determine role from argument, query text, twin goals, or default
+            target_role = role
+            if not target_role:
+                q_lower = query.lower()
+                for known_role in self.role_profiles.keys():
+                    role_words = known_role.replace("_", " ").split()
+                    if all(w in q_lower for w in role_words) or known_role in q_lower:
+                        target_role = known_role
+                        break
+                    # Check partial matches like "machine learning" or "cybersecurity"
+                    if any(part in q_lower for part in known_role.split("_") if len(part) > 4):
+                        target_role = known_role
+                        break
+            if not target_role and twin and hasattr(twin, "goals") and twin.goals:
                 first_goal = next(iter(twin.goals.values()), None)
                 if first_goal and hasattr(first_goal, "title"):
                     target_role = first_goal.title.lower().replace(" ", "_")
+            if not target_role:
+                target_role = "machine_learning_engineer"
+
             return self._run_mentor(query, intent, brief, history, target_role)
 
         elif target_agent == AgentType.RECOMMENDATION_SYSTEM:
@@ -143,6 +173,9 @@ class AgentOrchestrator:
 
         elif target_agent == AgentType.EXPLAINABILITY:
             return self._run_explainer(query, intent, brief, history)
+
+        elif target_agent == AgentType.STUDY_COACH:
+            return self._run_coach(query, intent, brief, history)
 
         else:
             # Fallback to Study Coach
@@ -256,65 +289,16 @@ class AgentOrchestrator:
         twin: StudentTwin | None,
     ) -> AgentResult:
         """Runs the recommendation agent."""
-        try:
-            import sys
-            rec_path = str(Path(__file__).parent / "recommendation_system")
-            if rec_path not in sys.path:
-                sys.path.insert(0, rec_path)
-            from orchestrator_interface import handle_orchestrator_request
+        from src.agents.recommendation_system.orchestrator_interface import recommend_text
 
-            learner_state = {
-                "level": "intermediate",
-                "goal": "machine learning",
-                "preferred_format": "video",
-            }
-            if twin and hasattr(twin, "profile"):
-                learner_state["name"] = getattr(twin.profile, "name", "student")
+        reply_text = recommend_text(brief)
 
-            req = {
-                "intent": "resource_recommendation",
-                "learner_state": learner_state,
-                "context": brief,
-                "user_request": query,
-            }
-            res = handle_orchestrator_request(req)
-            recs = res.get("recommendations", [])
-
-            if recs:
-                rec_lines = [f"- **{r.get('resource', 'Resource')}** (Score: {r.get('score', 'N/A')})" for r in recs[:3]]
-                reply_text = f"Here are the top recommended resources for you:\n" + "\n".join(rec_lines)
-            else:
-                reply_text = res.get("message", "No suitable resources found.")
-
-            return AgentResult(
-                reply=reply_text,
-                agent_name=AgentType.RECOMMENDATION_SYSTEM,
-                intent=intent,
-                raw_output=json.dumps(res),
-                recommendations=recs,
-            )
-        except Exception:
-            prompt = f"""
-You are the Resource Recommender for an educational platform.
-Briefing:
-{brief}
-
-Student request:
-{query}
-
-Recommend 2-3 specific learning resources (articles, courses, or videos) tailored to the student's level and learning preferences.
-"""
-            resp = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-            )
-            reply_text = resp.text or ""
-            return AgentResult(
-                reply=reply_text,
-                agent_name=AgentType.RECOMMENDATION_SYSTEM,
-                intent=intent,
-                raw_output=reply_text,
-            )
+        return AgentResult(
+            reply=reply_text,
+            agent_name=AgentType.RECOMMENDATION_SYSTEM,
+            intent=intent,
+            raw_output=reply_text,
+        )
 
     def _run_explainer(
         self,

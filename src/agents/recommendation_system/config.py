@@ -9,6 +9,7 @@ these lists automatically sees the update.
 KNOWN_LEVELS = ["beginner", "intermediate", "advanced"]
 KNOWN_FORMATS = [
     "video",
+    "playlist",
     "article",
     "course",
     "book",
