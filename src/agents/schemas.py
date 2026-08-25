@@ -6,7 +6,7 @@ Pydantic schemas and data contracts for the EduTwin Agent Layer.
 
 from enum import Enum
 from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AgentType(str, Enum):
@@ -21,22 +21,57 @@ class IntentDecision(BaseModel):
     """
     Structured response from Gemini when classifying user intent.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     agent: AgentType = Field(
-        description="The specialized agent best suited to handle the student query."
+        default=AgentType.STUDY_COACH,
+        description="The specialized agent best suited to handle the student query: study_coach, career_mentor, recommendation_system, or explainability."
     )
     intent: str = Field(
-        description="The specific canonical intent label (e.g., explain_concept, check_answer, give_practice, career_fit_question, goal_change, resource_recommendation)."
+        default="explain_concept",
+        description="The specific canonical intent label (e.g., explain_concept, check_answer, give_practice, career_fit_question, goal_change, progress_alignment_check, resource_recommendation, explain_decision)."
     )
     confidence: float = Field(
+        default=1.0,
         ge=0.0,
         le=1.0,
         description="Confidence in this classification."
     )
     rationale: str = Field(
+        default="",
         description="Short 1-sentence reasoning for choosing this agent and intent."
     )
+
+    @field_validator("agent", mode="before")
+    @classmethod
+    def normalize_agent(cls, v: Any) -> AgentType:
+        if isinstance(v, AgentType):
+            return v
+        if isinstance(v, str):
+            clean = v.strip().lower().replace(" ", "_").replace("-", "_")
+            if "career" in clean or "mentor" in clean or "job" in clean:
+                return AgentType.CAREER_MENTOR
+            if "coach" in clean or "tutor" in clean or "study" in clean:
+                return AgentType.STUDY_COACH
+            if "recommend" in clean or "resource" in clean:
+                return AgentType.RECOMMENDATION_SYSTEM
+            if "explain" in clean or "transparency" in clean:
+                return AgentType.EXPLAINABILITY
+            for item in AgentType:
+                if item.value == clean or item.name.lower() == clean:
+                    return item
+        return AgentType.STUDY_COACH
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, v: Any) -> float:
+        if v is None:
+            return 1.0
+        try:
+            val = float(v)
+            return max(0.0, min(1.0, val))
+        except (ValueError, TypeError):
+            return 1.0
 
 
 class CoachSignal(BaseModel):

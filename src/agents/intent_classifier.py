@@ -1,8 +1,5 @@
-"""
-intent_classifier.py
-
-Classifies user messages to detect intent and route to the appropriate AI agent.
-"""
+import json
+import re
 
 from google import genai
 from google.genai import types
@@ -57,7 +54,7 @@ Analyze the user's message and determine which specialized AI Agent should handl
 2. Agent: "career_mentor" (Career Planning, Skills, & Long-Term Goals)
    - "career_fit_question": Student asks if a career path, role, or direction suits them or what skills a role needs.
    - "progress_alignment_check": Student asks what to study next in the long run or if they are on track for their career goal.
-   - "goal_change": Student expresses interest in changing their primary career goal or learning direction.
+   - "goal_change": Student expresses interest in becoming a specific role, changing their primary career goal, or changing learning direction.
 
 3. Agent: "recommendation_system" (External Learning Resources)
    - "resource_recommendation": Student specifically asks for videos, courses, books, links, or articles to learn something.
@@ -80,12 +77,83 @@ Analyze the user's message and determine which specialized AI Agent should handl
                     response_schema=IntentDecision,
                 ),
             )
-            return response.parsed
+
+            # 1. Try SDK parsed object
+            if response.parsed and isinstance(response.parsed, IntentDecision):
+                return response.parsed
+
+            # 2. Try parsing raw JSON text from response
+            raw_text = response.text or ""
+            clean_text = re.sub(r"^```(?:json)?\s*", "", raw_text.strip(), flags=re.IGNORECASE)
+            clean_text = re.sub(r"\s*```$", "", clean_text)
+            if clean_text:
+                data = json.loads(clean_text)
+                return IntentDecision(**data)
+
         except Exception as exc:
-            # Safe fallback if network error, missing key, or transient failure occurs
+            print(f"[IntentClassifier] LLM classification warning: {exc}. Using heuristic classifier fallback.")
+
+        # Heuristic fallback if LLM classification fails
+        return self._heuristic_fallback(query)
+
+    def _heuristic_fallback(self, query: str) -> IntentDecision:
+        """
+        Rule-based fallback intent classification when LLM call is unavailable.
+        """
+        q = query.lower()
+
+        # Career Mentor signals
+        career_keywords = [
+            "want to be", "want to become", "become a", "career", "job",
+            "role", "engineer", "analyst", "developer", "switch to",
+            "goal", "future", "market", "industry", "roadmap"
+        ]
+        if any(kw in q for kw in career_keywords):
+            if any(k in q for k in ["want to be", "become", "switch to", "interested in being"]):
+                intent = "goal_change"
+            elif any(k in q for k in ["skills", "fit", "need to know", "requirements"]):
+                intent = "career_fit_question"
+            else:
+                intent = "progress_alignment_check"
+
             return IntentDecision(
-                agent=AgentType.STUDY_COACH,
-                intent="explain_concept",
-                confidence=0.5,
-                rationale=f"Fallback due to classification exception: {exc}",
+                agent=AgentType.CAREER_MENTOR,
+                intent=intent,
+                confidence=0.8,
+                rationale="Heuristic match for career planning and role guidance.",
             )
+
+        # Explainability signals (Check before recommendation since users often ask 'Why did you recommend X?')
+        explain_keywords = ["why did you", "why do you", "explain why", "why was", "how did you decide", "reason for recommendation", "why is this recommended"]
+        if any(kw in q for kw in explain_keywords):
+            return IntentDecision(
+                agent=AgentType.EXPLAINABILITY,
+                intent="explain_decision",
+                confidence=0.8,
+                rationale="Heuristic match for system transparency/explanation.",
+            )
+
+        # Recommendation signals
+        rec_keywords = ["recommend", "course", "video", "tutorial", "book", "resource", "link", "material", "where to learn"]
+        if any(kw in q for kw in rec_keywords):
+            return IntentDecision(
+                agent=AgentType.RECOMMENDATION_SYSTEM,
+                intent="resource_recommendation",
+                confidence=0.8,
+                rationale="Heuristic match for external resource request.",
+            )
+
+        # Study Coach signals (Default)
+        if any(kw in q for kw in ["practice", "exercise", "quiz", "problem", "test me"]):
+            intent = "give_practice"
+        elif any(kw in q for kw in ["check", "correct", "verify", "is this right", "my answer"]):
+            intent = "check_answer"
+        else:
+            intent = "explain_concept"
+
+        return IntentDecision(
+            agent=AgentType.STUDY_COACH,
+            intent=intent,
+            confidence=0.6,
+            rationale="Heuristic match for academic coaching.",
+        )
