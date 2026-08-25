@@ -9,7 +9,7 @@ from pydantic import BaseModel,Field
 import os
 from dotenv import load_dotenv,find_dotenv
 from typing import Optional
-
+from src.twin.student import StudentTwin
 
 
 import time
@@ -143,8 +143,9 @@ def get_embedding (content :str) -> list[float]:
         contents=content
     )
     
-    EMBEDDING_CACHE[content] = embedding
     embedding =result.embeddings[0].values
+    EMBEDDING_CACHE[content] = embedding
+
     return embedding
 
 
@@ -178,7 +179,7 @@ def extract_concept(content :str)->list[dict[str, str]]:
 
     return [c.model_dump() for c in response.concepts] #this turns it into a dictionary
 
-G = nx.DiGraph()
+##G = nx.DiGraph()
 #node = knowledgeNode()#useless btw, for testing 
 #elist = [(1, 2), (2, 3), (1, 4), (4, 2)]
 #G.add_edges_from(elist)
@@ -210,127 +211,141 @@ def embed_key(name: str) -> str:
 
 HIGH_THRESHOLD = 0.92
 LOW_THRESHOLD  = 0.80
-def search_node (name:str, description:str, create:bool,depth: int = 1):
-    
-    embed = get_embedding( f"Educational concept: {name}")
-    highestSimi=-1
-    node_highest=None
-    if len(G.nodes) == 0:
-        if create:
-            create_node(name=name, description=description, embedding=embed)
-            add_prerequisites(name=name, description=description)
-            return name
-        return None
-    
-    candidates=[]
-
-    for n in G.nodes:
-        similarity=cosine_similarity(embed,G.nodes[n]["knowledgeNode"].embedding)
-        candidates.append((n,similarity))
-        #if highestSimi<similarity: 
-        #    highestSimi=similarity
-        #    node_highest = n
-    candidates.sort(key=lambda x:x[1],reverse=True)
-    
-    node_highest, highestSimi = candidates[0] 
-    print("search_node(", name, ", create=", create, ")",highestSimi)
-    
-    
-    print(
-    f"highest={highestSimi:.6f}, "
-    f"high={HIGH_THRESHOLD}, "
-    f"low={LOW_THRESHOLD}, "
-    f"node={node_highest}"
-    )
-    
-    if highestSimi>= HIGH_THRESHOLD:
-        print("HIGH")
-        return node_highest   
-    
-    
-    for cani_node,cani_simi in candidates:
-        if cani_simi< LOW_THRESHOLD :
-            break
-        print("LOW -> asking LLM")
-        q= f"""
-            Do these refer to the same concept for an educational prerequisite graph?
-            Concept A: {cani_node}
-            Concept B: {name}
-            Answer only true or false.
-            """
-        if ask_yes_no(question=q):
-            return cani_node
-
-    if create:
-        create_node(name=name, description=description,embedding=embed)
-        add_prerequisites(name=name, description=description)
-        return name
-    return None
 
 
-    #node = knowledgeNode(knowledge=Knowledge(),embedding=embed)
-
-def create_node(name: str, description: str, embedding: list[float]):
-    k = Knowledge(title=name, description=description, mastery=0.5, confidence=0.0)
-    kn = KnowledgeNode(knowledge=k, embedding=embedding, alpha=0.5, beta=0.5)
-    G.add_node(
-        name,
-        knowledgeNode=kn,
-    )
+class KnowledgeGraph:
+    """Manages reading and writing to the StudentTwin's knowledge graph."""
     
-    
-def add_edge_safe(prereq: str, concept: str) -> bool:
-    if prereq == concept:
-        return False
-    if prereq not in G or concept not in G:
-        return False
-    if nx.has_path(G, concept, prereq):   # Rejects backwards paths that close cycles
-        return False
-    G.add_edge(prereq, concept)
-    return True
+    def __init__(self, student: StudentTwin):
+        self.student = student
+        self.G = student.graph
 
 
-def add_prerequisites(name: str, description: str, depth: int = 1, max_nodes: int = 200):
-    if depth <= 0 or len(G.nodes) >= max_nodes:
-        return
-    listprere=get_prerequisites(
-        concept=name,
-        description=description
-    )
 
-    print("Prerequisites for", name)
-    print(listprere)
 
-    for p in listprere:
-        n = search_node(p,"",create = True,depth= depth-1)
+    def create_node(self,name: str, description: str, embedding: list[float]):
+        k = Knowledge(title=name, description=description, mastery=0.5, confidence=0.0)
+        kn = KnowledgeNode(knowledge=k, embedding=embedding, alpha=0.5, beta=0.5)
+        self.student.knowledge[k.knowledge_id] = k 
+        self.G.add_node(
+            name,
+            knowledgeNode=kn,
+        )
+        
+    def search_node (self,name:str, description:str, create:bool,depth: int = 1):
+
+        embed = get_embedding( f"Educational concept: {name}")
+        highestSimi=-1
+        node_highest=None
+        if len(self.G.nodes) == 0:
+            if create:
+                self.create_node(name=name, description=description, embedding=embed)
+                self.add_prerequisites(name=name, description=description)
+                return name
+            return None
+
+        candidates=[]
+
+        for n in self.G.nodes:
+            similarity=cosine_similarity(embed,self.G.nodes[n]["knowledgeNode"].embedding)
+            candidates.append((n,similarity))
+            #if highestSimi<similarity: 
+            #    highestSimi=similarity
+            #    node_highest = n
+        candidates.sort(key=lambda x:x[1],reverse=True)
+
+        node_highest, highestSimi = candidates[0] 
+        print("search_node(", name, ", create=", create, ")",highestSimi)
+
 
         print(
-            "Searching prerequisite:",
-            p,
-            "Found:",
-            n
+        f"highest={highestSimi:.6f}, "
+        f"high={HIGH_THRESHOLD}, "
+        f"low={LOW_THRESHOLD}, "
+        f"node={node_highest}"
         )
 
-        if n is not None:
-            add_edge_safe(n,name)
-#def add_prerequisites(name,description):
-#    listprere=get_prerequisites(concept=name , description=description)
-#    for p in listprere:
-#        n= search_node(p,"",False)
-#        if n != None:
-#            G.add_edge(n,name)
-def get_node_predecessors(name:str)->list[KnowledgeNode]:
-    L:list[KnowledgeNode] =[]
-    for node in list(G.predecessors(name)):
-        L.append(G.nodes[node]["knowledgeNode"])
-    return L
-    
+        if highestSimi>= HIGH_THRESHOLD:
+            print("HIGH")
+            return node_highest   
 
-def get_node_successors(name:str)->list[KnowledgeNode]:
-    L:list[KnowledgeNode]=[]
-    for node in list(G.successors(name)):
-        L.append(G.nodes[node]["knowledgeNode"])
-    return L
+
+        for cani_node,cani_simi in candidates:
+            if cani_simi< LOW_THRESHOLD :
+                break
+            print("LOW -> asking LLM")
+            q= f"""
+                Do these refer to the same concept for an educational prerequisite graph?
+                Concept A: {cani_node}
+                Concept B: {name}
+                Answer only true or false.
+                """
+            if ask_yes_no(question=q):
+                return cani_node
+
+        if create:
+            self.create_node(name=name, description=description,embedding=embed)
+            self.add_prerequisites(name=name, description=description)
+            return name
+        return None
+
+
+        #node = knowledgeNode(knowledge=Knowledge(),embedding=embed)
+
+
+
+
+    def add_edge_safe(self,prereq: str, concept: str) -> bool:
+        if prereq == concept:
+            return False
+        if prereq not in self.G or concept not in self.G:
+            return False
+        if nx.has_path(self.G, concept, prereq):   # Rejects backwards paths that close cycles
+            return False
+        self.G.add_edge(prereq, concept)
+        return True
+
+
+    def add_prerequisites(self,name: str, description: str, depth: int = 1, max_nodes: int = 200):
+        if depth <= 0 or len(self.G.nodes) >= max_nodes:
+            return
+        listprere=get_prerequisites(
+            concept=name,
+            description=description
+        )
+
+        print("Prerequisites for", name)
+        print(listprere)
+
+        for p in listprere:
+            n = self.search_node(p,"",create = True,depth= depth-1)
+
+            print(
+                "Searching prerequisite:",
+                p,
+                "Found:",
+                n
+            )
+
+            if n is not None:
+                self.add_edge_safe(n,name)
+    #def add_prerequisites(name,description):
+    #    listprere=get_prerequisites(concept=name , description=description)
+    #    for p in listprere:
+    #        n= search_node(p,"",False)
+    #        if n != None:
+    #            G.add_edge(n,name)
+    def get_node_predecessors(self,name:str)->list[KnowledgeNode]:
+        L:list[KnowledgeNode] =[]
+        for node in list(self.G.predecessors(name)):
+            L.append(self.G.nodes[node]["knowledgeNode"])
+        return L
+
+    def get_node_successors(self,name:str)->list[KnowledgeNode]:
+        L:list[KnowledgeNode]=[]
+        for node in list(self.G.successors(name)):
+            L.append(self.G.nodes[node]["knowledgeNode"])
+        return L
 ## TODO when creating a new node send to LLM to make 5-10 prerequisites cosine similarity to search (and save their embedding) if these already exist or make new ones and make edges inbetween 
 
 ## G.add_node(

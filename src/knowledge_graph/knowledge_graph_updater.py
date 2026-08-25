@@ -1,8 +1,14 @@
-from src.twin.enums import PerformanceSignal
 from pydantic import BaseModel, Field
 from google import genai
-from src.knowledge_graph.knowledge_graph import (G, KnowledgeNode, search_node,safe_generate_content )
+from src.knowledge_graph.knowledge_graph import KnowledgeGraph, safe_generate_content 
 import networkx as nx
+from src.twin.profile import Profile
+
+from src.twin.enums import PerformanceSignal, TwinComponent, ResolutionStatus, EducationStage
+from src.updater.base import ComponentUpdater
+from src.updater.resolver import ResolvedEvidence
+from src.twin.student import StudentTwin
+
 import time
 client = genai.Client()
 import matplotlib.pyplot as mtl
@@ -16,15 +22,15 @@ SIGNAL_METRICS = {
     "SELF_EXPLANATION_INCORRECT": {"quality": -0.8, "default_weight": 0.7},
     "DEMONSTRATED_FAILURE": {"quality": -1.0, "default_weight": 1.0},
 }
-def update_node (node_name:str, quality : float,weight:float):
-    if node_name not in G.nodes:
-        return
-    kn : KnowledgeNode = G.nodes[node_name]["knowledgeNode"]
-    delta_alpha=max(0, quality) * weight
-    delta_beta =max(0,-quality) * weight
-    kn.alpha+= delta_alpha
-    kn.beta += delta_beta    
-    kn.recalculate_metrics()
+#def update_node (node_name:str, quality : float,weight:float):
+#    if node_name not in G.nodes:
+#        return
+#    kn : KnowledgeNode = G.nodes[node_name]["knowledgeNode"]
+#    delta_alpha=max(0, quality) * weight
+#    delta_beta =max(0,-quality) * weight
+#    kn.alpha+= delta_alpha
+#    kn.beta += delta_beta    
+#    kn.recalculate_metrics()
 #def propagate_upstream_evidence(target_node: str, quality: float, weight: float, gamma_0: float = 0.3, decay_lambda: float = 0.5):
 #    if quality <= 0:
 #        return
@@ -71,81 +77,150 @@ User Message:
         }
     ).parsed
     return response.observations
-def process_user_observation(user_message: str):
-    observations = extract_evidence_from_message(user_message)
-    
-    for obs in observations:
-        # Search or create node in graph
-        target_node = search_node(obs.concept_name, obs.concept_description, create=True)
-        if not target_node:
-            continue
+
+#def process_user_observation(user_message: str):
+#    observations = extract_evidence_from_message(user_message)
+#    for obs in observations:
+#        # Search or create node in graph
+#        target_node = kg.search_node(obs.concept_name, obs.concept_description, create=True)
+#        if not target_node: 
+#            continue
+#        signal_key = obs.signal.name if hasattr(obs.signal, 'name') else str(obs.signal)
+#        metrics = SIGNAL_METRICS.get(signal_key)
+#        if metrics is None:
+#            print(f"⚠️ Unknown signal {signal_key!r} — skipping")
+#            continue
+#        quality = metrics["quality"]
+#        weight = obs.weight
+#        update_node(target_node, quality, weight)
+
+
+class KnowledgeUpdater(ComponentUpdater):
+    component_name: str = "knowledge"
+    def update(self, student: StudentTwin, evidence: ResolvedEvidence) -> str:
+        """
+        Implements the update logic from ComponentUpdater base class.
+        """
+        # 1. Initialize our graph wrapper using the current student state
+        kg = KnowledgeGraph(student)
+        
+        # 2. Extract evidence (Assuming evidence.content holds the string message)
+        observations = extract_evidence_from_message(str(evidence.content))
+        
+        if not observations:
+            return "No educational concepts detected."
+
+        reports = []
+        for obs in observations:
+            # 3. Call search_node on the KnowledgeGraph INSTANCE, not globally
+            target_node = kg.search_node(obs.concept_name, obs.concept_description, create=True)
+            if not target_node:
+                continue
+                
+            signal_key = obs.signal.name if hasattr(obs.signal, 'name') else str(obs.signal)
+            metrics = SIGNAL_METRICS.get(signal_key)
             
-        signal_key = obs.signal.name if hasattr(obs.signal, 'name') else str(obs.signal)
-        metrics = SIGNAL_METRICS.get(signal_key)
+            if metrics is None:
+                print(f"⚠️ Unknown signal {signal_key!r} — skipping")
+                continue
+                
+            quality = metrics["quality"]
+            weight = obs.weight
+            
+            # 4. Modify the node inside the student's graph
+            kn = kg.G.nodes[target_node]["knowledgeNode"]
+            delta_alpha = max(0, quality) * weight
+            delta_beta = max(0, -quality) * weight
+            
+            kn.alpha += delta_alpha
+            kn.beta += delta_beta    
+            kn.recalculate_metrics()
+
+            reports.append(f"Updated '{target_node}' mastery to {kn.knowledge.mastery:.2%}")
+            
+        return " | ".join(reports)
+
+
         
-        if metrics is None:
-            print(f"⚠️ Unknown signal {signal_key!r} — skipping")
-            continue
-        quality = metrics["quality"]
-        weight = obs.weight
-        
-        update_node(target_node, quality, weight)
-        
-        
-def print_graph_state():
-    """Helper function to print all graph nodes and their statistical metrics."""
+def print_graph_state(student: StudentTwin):
     print("\n" + "=" * 60)
     print("CURRENT KNOWLEDGE GRAPH STATE")
     print("=" * 60)
     
+    G = student.graph
     if len(G.nodes) == 0:
         print("Graph is currently empty.")
         return
+        
     for node_name in G.nodes:
-        kn: KnowledgeNode = G.nodes[node_name]["knowledgeNode"]
+        kn = G.nodes[node_name]["knowledgeNode"]
         k = kn.knowledge
         prereqs = list(G.predecessors(node_name))
         
         print(f"\n📌 Concept: {node_name}")
         print(f"   Prerequisites : {prereqs if prereqs else 'None'}")
-        print(f"   Alpha (α)     : {kn.alpha:.2f} | Beta (β) : {kn.beta:.2f}")
-        print(f"   Mastery (E[X]): {k.mastery:.2%}")
-        print(f"   Confidence    : {k.confidence:.2%}")
+        print(f"   Alpha (α): {kn.alpha:.2f} | Beta (β): {kn.beta:.2f}")
+        print(f"   Mastery (E[X]): {k.mastery:.2%} | Confidence: {k.confidence:.2%}")
     print("=" * 60 + "\n")
-def visualize_graph():
-    """Renders the graph layout at the end without blocking execution midway."""
+
+
+def visualize_graph(student: StudentTwin):
+    G = student.graph
     if len(G.nodes) == 0:
         return
     mtl.figure(figsize=(10, 6))
     pos = nx.spring_layout(G, k=1.5)
     nx.draw(
-        G, pos,
-        with_labels=True,
-        node_color='skyblue',
-        node_size=2500,
-        font_size=10,
-        font_weight='bold',
-        arrows=True,
-        arrowsize=20
+        G, pos, with_labels=True, node_color='skyblue',
+        node_size=2500, font_size=10, font_weight='bold', arrows=True
     )
     mtl.title("Student Knowledge Graph")
     mtl.show()
+
+
 if __name__ == "__main__":
     print("Initializing Knowledge Updater System...\n")
     
+    # 1. Create a mock student twin instance
+    mock_student = StudentTwin(
+        profile=Profile(
+            name="John Doe",
+            education_stage=EducationStage.UNDERGRAD_YEAR_2
+        )
+    )
+    
+    # 2. Instantiate the Knowledge Component Updater
+    updater = KnowledgeUpdater()
+
+    # 3. Simulate sequential user interactions
     test_messages = [
         "I've been studying Linear Algebra and practicing Matrix Multiplication all week.",
         "Today I attempted Gradient Descent for optimization, but I made a math mistake in the step.",
         "I finally combined Gradient Descent and Matrix Multiplication to build Linear Regression!"
     ]
+    
     for idx, msg in enumerate(test_messages, start=1):
         print(f"\n--- Turn {idx}: Processing User Message ---")
         print(f'User: "{msg}"')
         
-        process_user_observation(msg)
-        print_graph_state()
-        # Pause AFTER processing the turn, not before
+        # Build ResolvedEvidence using proper Enums
+        mock_evidence = ResolvedEvidence(
+            component=TwinComponent.KNOWLEDGE,
+            status=ResolutionStatus.NEW,
+            content=msg
+        )
+        
+        # Run update through the standard updater interface
+        report = updater.update(mock_student, mock_evidence)
+        print(f"\nReport: {report}")
+        
+        # Display current state of the graph
+        print_graph_state(mock_student)
+        
+        # Free-tier rate limiting buffer between simulation steps
         if idx < len(test_messages):
-            print(" Pausing 10 seconds before next turn...")
+            print("⏳ Pausing 10 seconds before next turn...")
             time.sleep(10)
-    visualize_graph()
+            
+    # Render final knowledge graph topology
+    visualize_graph(mock_student)
