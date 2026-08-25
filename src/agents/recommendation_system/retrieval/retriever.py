@@ -157,10 +157,11 @@ def retrieve_with_fallback(search_requirement, seen_urls=None):
         return resources
 
     # Tier 4: everything we have.
-    relaxed_requirement["topic"] = None
-    resources = exclude_seen(retrieve_from_database(relaxed_requirement), seen_urls)
-    if resources:
-        return resources
+    if search_requirement["topic"] is None:
+        relaxed_requirement["topic"] = None
+        resources = exclude_seen(retrieve_from_database(relaxed_requirement), seen_urls)
+        if resources:
+            return resources
 
     # Tier 5: last resort -- go out to the real internet, skipping anything
     # this learner has already been shown.

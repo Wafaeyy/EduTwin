@@ -9,9 +9,15 @@ They are different things and must not be confused: a learner whose goal is
 "artificial intelligence" can still ask about calculus today, and the engine
 must search for calculus.
 
+The extracted topic is used DIRECTLY as an internet search query, so the
+prompt expands abbreviations -- a learner typing "calc" or "ML" must produce
+"calculus" and "machine learning", not the shorthand, which searches badly.
+
 Guardrails, all enforced by deterministic code around the call:
   - The prompt lists the ONLY permitted format/level/duration values.
   - The model must return null for anything the message does not state.
+  - Every returned value is checked against the known lists before use, so the
+    model cannot introduce a value the engine would not otherwise accept.
   - Any failure returns {} and the caller falls back to the Twin's stored
     preferences, so a failed extraction degrades rather than breaks.
 """
@@ -23,7 +29,7 @@ from google import genai
 
 from src.agents.recommendation_system.config import KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
 
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 MAX_REQUEST_CHARACTERS = 2000
 
 REQUEST_FIELDS = ["topic", "format", "level", "duration"]
@@ -39,7 +45,9 @@ Extract ONLY what the message explicitly asks for. Do not infer, guess, or inven
 
 Return a JSON object with exactly these four keys:
 
-"topic": the specific subject the student is asking about, as a short lowercase phrase (for example "calculus", "linear algebra", "machine learning"). This is what they want RIGHT NOW, not their long-term goal. If the message does not name a subject, null.
+"topic": the specific subject the student is asking about, as a short lowercase phrase. This is what they want RIGHT NOW, not their long-term goal. If the message does not name a subject, null.
+
+IMPORTANT: expand abbreviations and shorthand into the full, standard subject name, because this value is used directly as an internet search query. Examples: "calc" -> "calculus", "ml" -> "machine learning", "ai" -> "artificial intelligence", "linalg" -> "linear algebra", "ds" -> "data structures", "os" -> "operating systems", "dl" -> "deep learning", "nlp" -> "natural language processing", "cv" -> "computer vision", "db" -> "databases", "stats" -> "statistics", "algo" -> "algorithms", "oop" -> "object oriented programming". Use the full name a textbook would use.
 
 "format": EXACTLY one of {KNOWN_FORMATS}, or null. Only if the message asks for that kind of resource (for example "videos" -> "video", "a course" -> "course", "something to read" -> "article"). If they did not say, null.
 
@@ -53,14 +61,20 @@ Rules:
 - Respond with ONLY the JSON object. No explanation, no markdown code fences.
 
 Examples:
-Message: "recommend videos about calculus"
+Message: "recommend videos about calc"
 {{"topic": "calculus", "format": "video", "level": null, "duration": null}}
+
+Message: "I want to learn ML"
+{{"topic": "machine learning", "format": null, "level": null, "duration": null}}
 
 Message: "recommend something for me"
 {{"topic": null, "format": null, "level": null, "duration": null}}
 
-Message: "I need a short beginner course on linear algebra"
+Message: "I need a short beginner course on linalg"
 {{"topic": "linear algebra", "format": "course", "level": "beginner", "duration": "short"}}
+
+Message: "show me research papers on transformers"
+{{"topic": "transformers", "format": "research_paper", "level": null, "duration": null}}
 
 Student message:
 {truncated}
@@ -117,8 +131,7 @@ def extract_request(user_request):
     # to add is discarded before it can reach the engine.
     request_state = {key: extracted.get(key) for key in REQUEST_FIELDS}
 
-    # Reject any value outside the known lists -- the model cannot introduce a
-    # value the engine would not otherwise accept.
+    # Reject any value outside the known lists.
     if request_state["level"] not in KNOWN_LEVELS:
         request_state["level"] = None
     if request_state["format"] not in KNOWN_FORMATS:
@@ -132,9 +145,12 @@ def extract_request(user_request):
 
 if __name__ == "__main__":
     for message in [
+        "recommend videos about calc",
+        "I want to learn ML",
+        "show me stuff about ai",
         "recommend videos about calculus",
         "recommend something for me",
-        "I need a short beginner course on linear algebra",
+        "I need a short beginner course on linalg",
         "show me research papers on transformers",
         "",
     ]:
