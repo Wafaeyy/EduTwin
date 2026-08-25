@@ -16,7 +16,7 @@ from src.agents.recommendation_system.retrieval.discover import discover_resourc
 from src.agents.recommendation_system.analysis.resource_analyzer import analyze_resources
 from src.agents.recommendation_system.verification.verifier import verify_resources
 
-SIMILARITY_THRESHOLD = 0.2
+SIMILARITY_THRESHOLD = 0.5
 
 # Discovery targets resources that SURVIVE verification, not raw candidates.
 # Real runs showed candidates being lost to dead links and blocked domains,

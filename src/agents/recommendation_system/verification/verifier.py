@@ -111,7 +111,7 @@ def verify_resources(resources, verbose=False):
 
 if __name__ == "__main__":
     import time
-    from models.resource import Resource
+    from src.agents.recommendation_system.models.resource import Resource
 
     TEST_URLS = [
         "https://en.wikipedia.org/wiki/Machine_learning",
