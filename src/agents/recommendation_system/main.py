@@ -32,6 +32,15 @@ from src.agents.recommendation_system.database.persistence import (
 # good resources from every future request.
 MAX_RECOMMENDATIONS = 5
 
+# Resources scoring below this are not shown. A weak match is worse than an
+# honest "nothing good found" -- it wastes the learner's time and makes the
+# engine look careless.
+#
+# If NOTHING clears the bar, the best available are returned anyway with a
+# message saying so: never return nothing when something exists, but never
+# present a weak match as though it were a good one either.
+MIN_RECOMMENDATION_SCORE = 50
+
 
 def apply_request(learner, user_request):
     """Overlays what the learner asked for RIGHT NOW onto their stored state.
@@ -58,7 +67,8 @@ def apply_request(learner, user_request):
     if not requested:
         return learner, notes
 
-    # topic -> goal. The most important override: it decides what we search for.
+    # topic -> goal. The most important override: it decides what we search
+    # for, and it drives the topic gate in the scorer.
     if requested.get("topic"):
         if learner.get("goal") and requested["topic"] != learner["goal"]:
             notes.append(
@@ -148,14 +158,33 @@ def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_REC
 
     ranked = recommend(learner, verified_resources)
 
-    # Cap BEFORE recording history -- see save_history().
-    recommendations = ranked[:limit]
-    if len(ranked) > len(recommendations):
-        print(f"[recommendation] {len(ranked)} matched; returning the top {len(recommendations)}.")
+    # Drop weak matches. Off-topic resources score 0 via the scorer's topic
+    # gate, so this is what actually removes them from the learner's view.
+    strong = [record for record in ranked if record["score"] >= MIN_RECOMMENDATION_SCORE]
 
+    if strong:
+        recommendations = strong[:limit]
+        message = "OK"
+        if len(strong) < len(ranked):
+            dropped = len(ranked) - len(strong)
+            print(f"[recommendation] Dropped {dropped} resource(s) scoring below {MIN_RECOMMENDATION_SCORE}.")
+    else:
+        # Nothing cleared the bar. Return the best available rather than
+        # nothing, but say plainly that these are weak matches.
+        recommendations = ranked[:limit]
+        message = (
+            f"No strong matches were found. These are the closest available, "
+            f"but none scored {MIN_RECOMMENDATION_SCORE} or above."
+        )
+        print(f"[recommendation] Nothing reached {MIN_RECOMMENDATION_SCORE}; returning the best available.")
+
+    if len(ranked) > len(recommendations):
+        print(f"[recommendation] {len(ranked)} matched; returning {len(recommendations)}.")
+
+    # Cap and filter happen BEFORE recording history -- see save_history().
     save_history(twin_id, recommendations)
 
-    return {"recommendations": recommendations, "message": "OK", "notes": request_notes}
+    return {"recommendations": recommendations, "message": message, "notes": request_notes}
 
 
 def reject_recommendations(raw_learner, resource_urls):
@@ -295,25 +324,21 @@ if __name__ == "__main__":
 
     print("\n\n=== 1. No request -- uses the stored goal ===")
     result = get_recommendations(learner)
+    print(f"Message: {result['message']}")
     print(f"Returned {len(result['recommendations'])} resource(s).")
-    for record in result["recommendations"][:3]:
-        print(f"  {record['score']:>3} | {record['url']}")
+    for record in result["recommendations"]:
+        print_recommendation(record, detailed=False)
 
-    print("\n\n=== 2. Request names a DIFFERENT topic ===")
+    print("\n\n=== 2. Request names a COMPLETELY different topic ===")
+    print("Off-topic resources must score 0 and be dropped, forcing discovery.")
     result = get_recommendations(learner, user_request="recommend videos about calculus")
     print(f"Notes: {result['notes']}")
+    print(f"Message: {result['message']}")
     print(f"Returned {len(result['recommendations'])} resource(s).")
-    for record in result["recommendations"][:3]:
-        print(f"  {record['score']:>3} | {record['url']}")
+    for record in result["recommendations"]:
+        print_recommendation(record, detailed=True)
 
-    print("\n\n=== 3. Request names topic AND format ===")
-    result = get_recommendations(learner, user_request="I want to read articles about linear algebra")
-    print(f"Notes: {result['notes']}")
-    print(f"Returned {len(result['recommendations'])} resource(s).")
-    for record in result["recommendations"][:3]:
-        print(f"  {str(record['format']):<14} {record['score']:>3} | {record['url']}")
-
-    print("\n\n=== 4. Vague request -- falls back to stored state ===")
+    print("\n\n=== 3. Vague request -- falls back to stored state ===")
     result = get_recommendations(learner, user_request="recommend something for me")
     print(f"Notes: {result['notes']}  <- should be empty")
     print(f"Returned {len(result['recommendations'])} resource(s).")
