@@ -21,9 +21,9 @@ import json
 
 from google import genai
 
-from config import KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
+from src.agents.recommendation_system.config import KNOWN_LEVELS, KNOWN_FORMATS, KNOWN_DURATIONS
 
-GEMINI_MODEL = "gemini-3.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 MAX_REQUEST_CHARACTERS = 2000
 
 REQUEST_FIELDS = ["topic", "format", "level", "duration"]
