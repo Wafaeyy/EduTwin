@@ -35,14 +35,17 @@ FORMAT_SEARCH_TERMS = {
 # Earlier templates are the most direct; later ones deliberately reach for
 # different corners of the web so an exhausted learner gets new material.
 QUERY_TEMPLATES = [
+    # Neutral first -- these work for ANY topic, academic or not.
     "{topic} {level} {format}",
+    "{topic} {format}",
+    "best {topic} {format}",
+    "{topic} explained {format}",
+    # Learning-oriented phrasings, used when the plain ones run dry.
+    "how to {topic} {format}",
+    "{topic} full guide {format}",
     "learn {topic} from scratch {format}",
     "{topic} crash course {format}",
-    "best {format} to learn {topic}",
-    "{topic} explained step by step {format}",
-    "{topic} full guide {format}",
 ]
-
 
 def build_query(template, search_requirement):
     """Fills one template and tidies up the spacing.

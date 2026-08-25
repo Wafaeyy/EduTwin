@@ -66,7 +66,7 @@ def neural_cosine_similarity(text_a, text_b):
               can occasionally give small negative values for very
               unrelated text, which is normal).
     """
-    from retrieval.semantic import dot_product, magnitude
+    from src.agents.recommendation_system.retrieval.semantic import dot_product, magnitude
 
     vector_a = build_neural_vector(text_a)
     vector_b = build_neural_vector(text_b)
