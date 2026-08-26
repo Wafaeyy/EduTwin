@@ -76,6 +76,83 @@ export default function Home() {
   }
 
   /*
+   * Delete a conversation.
+   *
+   * If the deleted conversation is active,
+   * another conversation becomes active.
+   *
+   * If it was the only conversation,
+   * create a fresh empty conversation.
+   */
+  function handleDeleteChat(chatId: string) {
+    const chatIndex = chats.findIndex(
+      (chat) => chat.id === chatId
+    );
+
+    if (chatIndex === -1) {
+      return;
+    }
+
+    const remainingChats = chats.filter(
+      (chat) => chat.id !== chatId
+    );
+
+    /*
+     * If the user deleted the only conversation,
+     * create a fresh empty conversation.
+     */
+    if (remainingChats.length === 0) {
+      const newChat = createChat();
+
+      setChats([newChat]);
+      setActiveChatId(newChat.id);
+
+      return;
+    }
+
+    setChats(remainingChats);
+
+    /*
+     * If the deleted conversation was active,
+     * select another conversation.
+     */
+    if (chatId === activeChatId) {
+      const nextChat =
+        remainingChats[chatIndex] ??
+        remainingChats[chatIndex - 1] ??
+        remainingChats[0];
+
+      setActiveChatId(nextChat.id);
+    }
+  }
+
+  /*
+   * Rename a conversation.
+   */
+  function handleRenameChat(
+    chatId: string,
+    newTitle: string
+  ) {
+    const trimmedTitle = newTitle.trim();
+
+    if (!trimmedTitle) {
+      return;
+    }
+
+    setChats((currentChats) =>
+      currentChats.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              title: trimmedTitle,
+              updatedAt: Date.now(),
+            }
+          : chat
+      )
+    );
+  }
+
+  /*
    * Find the currently active conversation.
    */
   const activeChat = chats.find(
@@ -89,6 +166,8 @@ export default function Home() {
         activeChatId={activeChatId}
         onNewChat={handleNewChat}
         onSelectChat={setActiveChatId}
+        onDeleteChat={handleDeleteChat}
+        onRenameChat={handleRenameChat}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">

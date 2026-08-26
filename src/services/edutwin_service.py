@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from src.retrieval.context_builder import ContextBuilder
 from src.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 from src.retrieval.memory_retriever import MemoryRetriever, MemoryStore
@@ -25,6 +27,7 @@ class EduTwinService:
                 university= "big ass",
                 fied_of_study="AI",
                 education_stage= EducationStage.UNDERGRAD_YEAR_2,
+                email="test@gmail.com"
             )
         
         self.twin = StudentTwin(profile=profile)
@@ -158,3 +161,28 @@ class EduTwinService:
             "memory_created": memory is not None,
             "twin": self.twin,
         }
+        
+    def get_profile(self) -> Profile:
+        """
+        Return the student's current profile.
+        """
+        return self.twin.profile
+
+    def update_profile(self, profile: Profile) -> Profile:
+        """
+        Replace the student's profile with an explicitly
+        edited profile from the user.
+
+        Profile edits made directly by the learner do not
+        go through the AI Twin Updater.
+        """
+        self.twin.profile = profile
+        self.twin.last_updated = datetime.now()
+
+        return self.twin.profile
+    
+    def get_twin(self) -> StudentTwin:
+        """
+        Return the student's current Digital Twin.
+        """
+        return self.twin

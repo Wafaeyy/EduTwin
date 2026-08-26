@@ -2,3 +2,8 @@
 cd D:\EduTwin\frontend
 npm run dev
 */
+
+/*
+to run api
+python -m uvicorn api.main:app --reload
+*/
