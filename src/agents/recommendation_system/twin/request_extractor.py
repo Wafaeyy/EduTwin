@@ -12,7 +12,13 @@ THREE LAYERS, cheapest and most reliable first:
   3. Keywords     -- deterministic pattern matching when Gemini is unavailable.
 
 Layer 3 exists because Gemini failed repeatedly during development (429 quota,
-503 overload). With no extraction at all, every recommendation scored 0/100.
+503 overload) and because an unset API key silently disables it. With no
+extraction at all, every recommendation scores 0/100.
+
+Layer 3 is deliberately cruder than Gemini and is expected to be. It reads the
+common shapes -- "10 videos about calculus", "a short beginner course on
+python" -- and returns None for anything it cannot determine, at which point
+the engine falls back to the learner's stored preferences.
 
 The extracted topic is used DIRECTLY as an internet search query, so
 abbreviations are expanded: "calc" must become "calculus", not stay as
@@ -96,12 +102,20 @@ NUMBER_WORDS = {
     "a": 1, "an": 1, "couple": 2, "few": 3, "several": 3,
 }
 
-TOPIC_MARKERS = ["about", "on", "for", "regarding", "concerning", "related to"]
+# Words that introduce the topic: "videos ABOUT calculus", "a course ON python".
+TOPIC_MARKERS = ["about", "on", "for", "regarding", "concerning"]
 
+# Words stripped from a topic once found -- they describe the request, not the
+# subject, and would pollute the search query.
+#
+# NOTE: "learn" and "learning" are deliberately NOT here. A real run stripped
+# "learning" out of "machine learning", leaving the topic as "machine" -- and
+# the engine recommended a sewing machine tutorial. Losing half a subject name
+# is far worse than occasionally leaving "learn" in the query.
 NOISE_WORDS = set(FORMAT_WORDS) | set(LEVEL_WORDS) | set(DURATION_WORDS) | set(NUMBER_WORDS) | {
     "recommend", "recommendation", "recommendations", "suggest", "give", "show",
-    "find", "want", "need", "me", "some", "any", "please", "how", "to", "learn",
-    "learning", "study", "a", "an", "the", "i", "my", "of", "in", "and", "or",
+    "find", "want", "need", "me", "some", "any", "please", "how", "to",
+    "study", "a", "an", "the", "i", "my", "of", "in", "and", "or",
     "something", "stuff", "things", "resource", "resources", "material",
     "materials", "play", "get", "can", "you",
 }
@@ -110,8 +124,8 @@ NOISE_WORDS = set(FORMAT_WORDS) | set(LEVEL_WORDS) | set(DURATION_WORDS) | set(N
 def clamp_count(value):
     """Turns whatever came back into a usable count, or None.
 
-    Anything unparseable, zero, negative, or absurdly large becomes None or is
-    pulled into range -- the caller then uses the default.
+    Anything unparseable, zero, or negative becomes None; anything absurdly
+    large is pulled down into range. The caller then uses the default.
     """
     if value is None:
         return None
@@ -162,18 +176,26 @@ def extract_by_keywords(user_request):
             found["count"] = clamp_count(NUMBER_WORDS[word])
 
     # Topic: prefer whatever follows a marker word ("about", "on", "for"),
-    # since that is where people put the subject.
+    # since that is where people put the subject. Marker words are themselves
+    # excluded -- "recommend something for me" once produced the topic "for",
+    # and the engine searched the web for "for beginner video".
     topic_words = []
     for marker in TOPIC_MARKERS:
         match = re.search(rf"\b{marker}\b(.+)", text)
         if match:
-            topic_words = [w for w in re.findall(r"[a-z0-9+#]+", match.group(1))
-                           if w not in NOISE_WORDS and not w.isdigit()]
+            topic_words = [
+                w for w in re.findall(r"[a-z0-9+#]+", match.group(1))
+                if w not in NOISE_WORDS and w not in TOPIC_MARKERS and not w.isdigit()
+            ]
             if topic_words:
                 break
 
+    # No marker found: take whatever is left after removing the noise.
     if not topic_words:
-        topic_words = [w for w in words if w not in NOISE_WORDS and not w.isdigit()]
+        topic_words = [
+            w for w in words
+            if w not in NOISE_WORDS and w not in TOPIC_MARKERS and not w.isdigit()
+        ]
 
     if topic_words:
         raw_topic = " ".join(topic_words)
@@ -221,6 +243,9 @@ Message: "I want to learn ML"
 
 Message: "show me three beginner python courses"
 {{"topic": "python", "format": "course", "level": "beginner", "duration": null, "count": 3}}
+
+Message: "recomend for me videos about how to play noita"
+{{"topic": "noita", "format": "video", "level": null, "duration": null, "count": null}}
 
 Message: "recommend something for me"
 {{"topic": null, "format": null, "level": null, "duration": null, "count": null}}
@@ -304,8 +329,8 @@ def extract_request(user_request, use_cache=True):
     else:
         print("[request extractor] GEMINI_API_KEY is not set; falling back to keyword matching.")
 
-    # Layer 3: deterministic keywords. Not as good, but far better than
-    # nothing -- with no extraction at all, every recommendation scores 0/100.
+    # Layer 3: deterministic keywords. Cruder, but far better than nothing --
+    # with no extraction at all, every recommendation scores 0/100.
     request_state = clean_request_state(extract_by_keywords(user_request))
     print(f"[request extractor] Keyword fallback found: {request_state}")
 
@@ -317,25 +342,26 @@ def extract_request(user_request, use_cache=True):
 if __name__ == "__main__":
     MESSAGES = [
         "recommend videos about calc",
-        "give me 10 videos about machine learning",
+        "give me 8 videos about machine learning",
         "show me three beginner python courses",
         "I want a couple of articles on transformers",
         "recomend for me videos about how to play noita",
         "recommend something for me",
         "give me 500 videos about python",
+        "I want to learn deep learning",
     ]
 
-    print("=" * 60)
-    print("KEYWORD FALLBACK ONLY (no Gemini, no cache)")
-    print("=" * 60)
+    print("=" * 64)
+    print("KEYWORD FALLBACK ONLY (simulates Gemini being unavailable)")
+    print("=" * 64)
     for message in MESSAGES:
         print(f"\n{message!r}")
         print(f"  -> {clean_request_state(extract_by_keywords(message))}")
 
     print()
-    print("=" * 60)
+    print("=" * 64)
     print("FULL EXTRACTION (cache -> Gemini -> keywords)")
-    print("=" * 60)
+    print("=" * 64)
     for message in MESSAGES:
         print(f"\n{message!r}")
         print(f"  -> {extract_request(message)}")
