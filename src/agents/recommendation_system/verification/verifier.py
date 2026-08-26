@@ -30,7 +30,32 @@ REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) EduTwinRecommendationEngine/1.0"
 }
 
+from urllib.parse import urlparse
 
+# Paths that mean "this is a site's front door", not a specific resource.
+HOMEPAGE_PATHS = {"", "/", "/index.html", "/index.php", "/home", "/en", "/en-us"}
+
+
+def is_homepage(url):
+    """True if this url is a site homepage rather than a specific resource.
+
+    A homepage has no particular content, no difficulty and no single topic --
+    there is nothing to recommend. A real run surfaced the GeeksforGeeks
+    homepage as a machine learning recommendation scoring 50/100, purely
+    because its title contains the word "learning".
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    path = (parsed.path or "").rstrip("/").lower()
+    if path in HOMEPAGE_PATHS or path == "":
+        # A query string means it is a search or filter page, which does point
+        # at something specific.
+        return not parsed.query
+
+    return False
 def verify_url_reachable(url):
     """One real network request. Returns True if the page responds."""
     try:
@@ -55,6 +80,10 @@ def check_free_gates(resource, verbose=False):
     if is_blocked(resource.url):
         if verbose:
             print(f"[verification] Rejected (blocked domain '{blocked_reason(resource.url)}'): {resource.url}")
+        return False
+    if is_homepage(resource.url):
+        if verbose:
+            print(f"[verification] Rejected (site homepage, not a specific resource): {resource.url}")
         return False
 
     return True
