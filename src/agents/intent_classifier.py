@@ -19,16 +19,14 @@ class IntentClassifier:
         api_key: str | None = None,
     ):
         self.model = model
-        self._client = client
-        self._api_key = api_key
+        self.client = client or genai.Client(api_key=api_key)
 
-    @property
-    def client(self) -> genai.Client:
-        if self._client is None:
-            self._client = genai.Client(api_key=self._api_key)
-        return self._client
-
-    def classify(self, query: str, context_summary: str | None = None) -> IntentDecision:
+    def classify(
+        self,
+        query: str,
+        context_summary: str | None = None,
+        history: list[str] | None = None,
+    ) -> IntentDecision:
         """
         Classifies the student query into an AgentType and specific intent.
 
@@ -61,12 +59,42 @@ Analyze the user's message and determine which specialized AI Agent should handl
 
 4. Agent: "explainability" (System Transparency)
    - "explain_decision": Student asks WHY the system recommended a specific item, gave specific advice, or made a decision.
+   ##Ouptut format
 
 ### USER MESSAGE:
 \"\"\"{query}\"\"\"
+
+### HOW TO CHOOSE
+- If the message asks about a concept, an answer, or practice, it is study_coach.
+- If it asks about a career, a role, long-term direction, or changing goals, it
+  is career_mentor.
+- If it asks for specific materials to learn from, it is recommendation_system.
+- If it asks why the system said or suggested something, it is explainability.
+- If a message covers both a concept AND a career question, choose
+  career_mentor. The concept can be handled on a later turn.
+  - If the message is vague or short (e.g. "explain it", "give me an example")
+  and RECENT CONVERSATION is provided, use it to infer what "it" refers to.
+- If it is still ambiguous even with that context, do not guess confidently —
+  set confidence below 0.5 and pick your best guess anyway.
+
+### YOUR OUTPUT
+Respond with:
+- agent: one of study_coach, career_mentor, recommendation_system, explainability
+- intent: one of the canonical intents listed above
+- confidence: match the closest case
+    0.9 - 1.0  the message clearly and only fits one agent
+    0.7 - 0.8  it fits one agent, with some wording that could suggest another
+    0.5 - 0.6  it genuinely fits two agents and you applied the rule above
+- rationale: one sentence naming what in the message decided it
 """
         if context_summary:
             prompt += f"\n### CONTEXT (Optional background):\n\"\"\"{context_summary[:500]}\"\"\"\n"
+        if history:
+            prompt += (
+                "\n### RECENT CONVERSATION (for resolving follow-ups; the "
+                "current message may only make sense in light of this):\n"
+                + "\n".join(history[-4:]) + "\n"
+            )
 
         try:
             response = self.client.models.generate_content(
@@ -90,70 +118,16 @@ Analyze the user's message and determine which specialized AI Agent should handl
                 data = json.loads(clean_text)
                 return IntentDecision(**data)
 
-        except Exception as exc:
-            print(f"[IntentClassifier] LLM classification warning: {exc}. Using heuristic classifier fallback.")
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            print(f"[IntentClassifier] Classification failed: {exc}. Defaulting to study_coach.")
 
-        # Heuristic fallback if LLM classification fails
-        return self._heuristic_fallback(query)
-
-    def _heuristic_fallback(self, query: str) -> IntentDecision:
-        """
-        Rule-based fallback intent classification when LLM call is unavailable.
-        """
-        q = query.lower()
-
-        # Career Mentor signals
-        career_keywords = [
-            "want to be", "want to become", "become a", "career", "job",
-            "role", "engineer", "analyst", "developer", "switch to",
-            "goal", "future", "market", "industry", "roadmap"
-        ]
-        if any(kw in q for kw in career_keywords):
-            if any(k in q for k in ["want to be", "become", "switch to", "interested in being"]):
-                intent = "goal_change"
-            elif any(k in q for k in ["skills", "fit", "need to know", "requirements"]):
-                intent = "career_fit_question"
-            else:
-                intent = "progress_alignment_check"
-
-            return IntentDecision(
-                agent=AgentType.CAREER_MENTOR,
-                intent=intent,
-                confidence=0.8,
-                rationale="Heuristic match for career planning and role guidance.",
-            )
-
-        # Explainability signals (Check before recommendation since users often ask 'Why did you recommend X?')
-        explain_keywords = ["why did you", "why do you", "explain why", "why was", "how did you decide", "reason for recommendation", "why is this recommended"]
-        if any(kw in q for kw in explain_keywords):
-            return IntentDecision(
-                agent=AgentType.EXPLAINABILITY,
-                intent="explain_decision",
-                confidence=0.8,
-                rationale="Heuristic match for system transparency/explanation.",
-            )
-
-        # Recommendation signals
-        rec_keywords = ["recommend", "course", "video", "tutorial", "book", "resource", "link", "material", "where to learn"]
-        if any(kw in q for kw in rec_keywords):
-            return IntentDecision(
-                agent=AgentType.RECOMMENDATION_SYSTEM,
-                intent="resource_recommendation",
-                confidence=0.8,
-                rationale="Heuristic match for external resource request.",
-            )
-
-        # Study Coach signals (Default)
-        if any(kw in q for kw in ["practice", "exercise", "quiz", "problem", "test me"]):
-            intent = "give_practice"
-        elif any(kw in q for kw in ["check", "correct", "verify", "is this right", "my answer"]):
-            intent = "check_answer"
-        else:
-            intent = "explain_concept"
-
+               # Classification failed. Default to the coach with zero confidence, so
+        # the turn still works and the failure is visible in the logs.
         return IntentDecision(
             agent=AgentType.STUDY_COACH,
-            intent=intent,
-            confidence=0.6,
-            rationale="Heuristic match for academic coaching.",
+            intent="explain_concept",
+            confidence=0.0,
+            rationale="Classification failed; defaulted to study_coach.",
         )
+
+    
