@@ -9,10 +9,11 @@ from src.updater.updater import TwinUpdater
 from src.updater.interest_updater import InterestUpdater
 from src.updater.preference_updater import PreferenceUpdater
 from src.updater.skill_updater import SkillUpdater
+from src.knowledge_graph.knowledge_graph_updater import KnowledgeUpdater
 from src.updater.resolver import TwinEntityResolver
 
 ## MAIN 
-## TODO STUDENT ID IN RETRIEVAL REQUEST, API KEYS IN ENVIRONMENT, comments of removed shit like memory types
+## TODO chats history to agent
 
 def main():
     query = ""
@@ -34,7 +35,8 @@ def main():
     interest_updater = InterestUpdater()
     skill_updater = SkillUpdater()
     preference_updater = PreferenceUpdater()
-    component_updaters = [interest_updater,skill_updater,preference_updater]
+    knowledge_updater = KnowledgeUpdater
+    component_updaters = [interest_updater,skill_updater,preference_updater,knowledge_updater]
     twin_updater = TwinUpdater(component_updaters= component_updaters)
     resolver = TwinEntityResolver(twin_store= twin_store)
     resolved_evidence = resolver.resolve(student= twin, memory= memory)
