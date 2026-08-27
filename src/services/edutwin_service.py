@@ -12,7 +12,7 @@ from src.updater.interest_updater import InterestUpdater
 from src.updater.preference_updater import PreferenceUpdater
 from src.updater.skill_updater import SkillUpdater
 from src.updater.resolver import TwinEntityResolver
-
+from src.knowledge_graph.knowledge_graph_updater import KnowledgeUpdater
 from src.twin.profile import Profile
 from src.twin.preference import Preference
 from src.twin.knowledge import Knowledge
@@ -109,11 +109,12 @@ class EduTwinService:
         interest_updater = InterestUpdater()
         skill_updater = SkillUpdater()
         preference_updater = PreferenceUpdater()
-
+        knowledge_updater = KnowledgeUpdater()
         component_updaters = [
             interest_updater,
             skill_updater,
             preference_updater,
+            knowledge_updater
         ]
 
         self.twin_updater = TwinUpdater(
