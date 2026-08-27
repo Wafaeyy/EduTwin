@@ -330,10 +330,12 @@ export default function Sidebar({
         <span>My Twin</span>
 </Link>
 
-        <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-700 transition hover:bg-zinc-100">
+        <Link 
+        href="/graph" 
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-700 transition hover:bg-zinc-100">
           <span>◈</span>
           <span>Knowledge Graph</span>
-        </button>
+        </Link>
 
         <Link
         href="/settings"

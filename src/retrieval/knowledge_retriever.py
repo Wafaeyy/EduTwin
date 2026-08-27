@@ -60,18 +60,18 @@ class KnowledgeGraphRetriever:
                 continue
 
             seen.add(node_name)
-            node = self.kg.get_node(node_name)
+            node = self.kg.search_node(node_name)
             if node:
                 evidence.append(self._to_evidence(node, "Target Concept"))
 
             # 1. Prerequisites (Predecessors)
-            for p in self.kg.get_predecessors(node_name):
+            for p in self.kg.get_node_predecessors(node_name):
                 if p.knowledge.title not in seen:
                     seen.add(p.knowledge.title)
                     evidence.append(self._to_evidence(p, f"Prerequisite of {node_name}"))
 
             # 2. Advanced applications (Successors)
-            for s in self.kg.get_successors(node_name):
+            for s in self.kg.get_node_successors(node_name):
                 if s.knowledge.title not in seen:
                     seen.add(s.knowledge.title)
                     evidence.append(self._to_evidence(s, f"Advanced application of {node_name}"))

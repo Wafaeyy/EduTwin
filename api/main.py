@@ -89,6 +89,37 @@ def get_twin():
         "last_updated": twin.last_updated.isoformat(),
     }
 
+@app.get("/twin/knowledge-graph")
+def get_knowledge_graph():
+    student = service.twin
+
+    nodes = []
+
+    for node_name in student.graph.nodes:
+        knowledge_node = student.graph.nodes[node_name]["knowledgeNode"]
+        knowledge = knowledge_node.knowledge
+
+        nodes.append({
+            "id": node_name,
+            "title": knowledge.title,
+            "description": knowledge.description,
+            "mastery": knowledge.mastery,
+            "confidence": knowledge.confidence,
+        })
+
+    edges = []
+
+    for source, target in student.graph.edges:
+        edges.append({
+            "source": source,
+            "target": target,
+        })
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+    }
+
 @app.put("/twin/profile", response_model=Profile)
 def update_profile(profile: Profile):
     return service.update_profile(profile)
