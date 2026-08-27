@@ -22,7 +22,7 @@ from src.twin.skill import Skill
 from src.twin.interest import Interest
 from src.twin.goal import Goal
 from src.twin.enums import EducationStage,LearningContext,PreferenceDimension,GoalPriority,GoalStatus
-
+from src.retrieval.knowledge_retriever import KnowledgeGraphRetriever
 from src.agents import AgentOrchestrator
 
 class EduTwinService:
@@ -96,13 +96,15 @@ class EduTwinService:
         self.twin_retriever = TwinRetriever(
             twin_store=self.twin_store
         )
-        knowledge_graph = KnowledgeGraph(self.twin)
-        self.knowledge_retriever = KnowledgeGraphRetriever(knowledge_graph=knowledge_graph)
-
+        
+        self.knowledge_graph = KnowledgeGraph(self.twin)
+        
+        self.graph_retriever = KnowledgeGraphRetriever(self.knowledge_graph)
+        
         self.retrieval_orchestrator = RetrievalOrchestrator(
             memory_retriever=self.memory_retriever,
             twin_retriever=self.twin_retriever,
-            graph_retriever=self.knowledge_retriever
+            graph_retriever= self.graph_retriever
         )
 
         # Memory system
