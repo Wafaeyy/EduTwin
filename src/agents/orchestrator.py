@@ -124,8 +124,8 @@ class AgentOrchestrator:
         if history is None:
             history = self.history[-6:]
         # Step 1: Detect intent and choose agent
-        intent_decision = forced_intent or self.classifier.classify(
-            query=query, context_summary=brief
+            intent_decision = forced_intent or self.classifier.classify(
+            query=query, context_summary=brief, history=history
         )
 
         target_agent = intent_decision.agent
