@@ -174,6 +174,14 @@ def recommend_from_briefing(briefing, user_request=None, something_else=False, i
     })
 
 
+# How much detail to show for the analysed resource. Real runs printed eight
+# sections each with a full paragraph, which buried the recommendations
+# underneath a wall of text. The learner wants to see WHAT is inside, not read
+# the whole thing before they have chosen anything.
+MAX_CONTENT_ITEMS_SHOWN = 5
+SHOW_CONTENT_SUMMARIES = False
+
+
 def format_response_as_text(response):
     """Turns the engine's structured response into readable display text.
 
@@ -199,55 +207,85 @@ def format_response_as_text(response):
 
     count = len(recommendations)
     lines.append(f"Found {count} resource{'s' if count != 1 else ''} for you:")
-    lines.append("")
+
+    # If nothing cleared the quality bar, say so before the list rather than
+    # presenting weak matches as though they were good ones.
+    if response["message"] != "OK":
+        lines.append(response["message"])
 
     content = response.get("content")
     content_url = response.get("content_for_url")
 
     for index, record in enumerate(recommendations, start=1):
+        lines.append("")
         lines.append(f"{index}. {record['resource']}")
-        lines.append(f"   Link:  {record['url']}")
 
         resource_type = record["format"] or "unknown type"
-        lines.append(f"   Type:  {resource_type}   |   Match: {record['score']}/100")
+        lines.append(f"   {resource_type}  ·  {record['score']}/100 match")
+        lines.append(f"   {record['url']}")
 
-        if record["reasons"]:
-            lines.append("   Why this one:")
-            for reason in record["reasons"]:
-                lines.append(f"     - {reason}")
+        # One combined reason line instead of a bullet per factor. The
+        # "personalization is partial" note is dropped here: it repeats on
+        # every single card and tells the learner nothing actionable.
+        shown_reasons = [r for r in record["reasons"] if not r.startswith("Note:")]
+        if shown_reasons:
+            lines.append(f"   Why: {'; '.join(shown_reasons)}")
 
         # Deep analysis belongs to exactly ONE resource. Match by url, never by
         # position -- if ranking changes, position attaches it to the wrong
         # resource silently.
         if content and record["url"] == content_url:
-            if content.get("access_status") == "ok":
-                chapters = content.get("chapters")
-                sections = content.get("sections")
+            lines.extend(format_content_lines(content))
 
-                if chapters:
-                    lines.append("")
-                    lines.append(f"   What's inside ({len(chapters)} chapters):")
-                    for chapter in chapters:
-                        lines.append(f"     [{chapter['start_time']}] {chapter['topic']}")
-                        if chapter.get("summary"):
-                            lines.append(f"          {chapter['summary']}")
+    return "\n".join(lines)
 
-                elif sections:
-                    lines.append("")
-                    lines.append(f"   What's inside ({len(sections)} sections):")
-                    for section in sections:
-                        mark = "*" if section.get("relevant_to_requested_topic") else " "
-                        lines.append(f"    {mark} {section['heading']}")
-                        if section.get("summary"):
-                            lines.append(f"          {section['summary']}")
-                    lines.append("     (* = directly relevant to your goal)")
-            else:
-                lines.append(f"   Could not look inside this one: {content.get('access_status')}")
+
+def format_content_lines(content):
+    """The 'what's inside' block for the one analysed resource.
+
+    Deliberately compact: headings only by default, capped at
+    MAX_CONTENT_ITEMS_SHOWN. Set SHOW_CONTENT_SUMMARIES to True if the
+    interface has room for the full breakdown.
+    """
+    if content.get("access_status") != "ok":
+        return [f"   (Could not look inside: {content.get('access_status')})"]
+
+    chapters = content.get("chapters")
+    sections = content.get("sections")
+    lines = []
+
+    if chapters:
+        total = len(chapters)
+        lines.append("")
+        lines.append(f"   Inside this one ({total} chapter{'s' if total != 1 else ''}):")
+        for chapter in chapters[:MAX_CONTENT_ITEMS_SHOWN]:
+            lines.append(f"     {chapter['start_time']}  {chapter['topic']}")
+            if SHOW_CONTENT_SUMMARIES and chapter.get("summary"):
+                lines.append(f"              {chapter['summary']}")
+        if total > MAX_CONTENT_ITEMS_SHOWN:
+            lines.append(f"     ... and {total - MAX_CONTENT_ITEMS_SHOWN} more")
+
+    elif sections:
+        total = len(sections)
+        # Lead with the parts that are actually about what the learner asked
+        # for -- an eight-section article usually has two that matter.
+        relevant = [s for s in sections if s.get("relevant_to_requested_topic")]
+        chosen = relevant if relevant else sections
 
         lines.append("")
+        if relevant:
+            lines.append(f"   Inside this one ({len(relevant)} of {total} sections are on your topic):")
+        else:
+            lines.append(f"   Inside this one ({total} section{'s' if total != 1 else ''}):")
 
-    return "\n".join(lines).rstrip()
+        for section in chosen[:MAX_CONTENT_ITEMS_SHOWN]:
+            lines.append(f"     - {section['heading']}")
+            if SHOW_CONTENT_SUMMARIES and section.get("summary"):
+                lines.append(f"       {section['summary']}")
+        if len(chosen) > MAX_CONTENT_ITEMS_SHOWN:
+            lines.append(f"     ... and {len(chosen) - MAX_CONTENT_ITEMS_SHOWN} more")
 
+    return lines
 
 def recommend_text(briefing, user_request=None, something_else=False, include_content=True):
     """Same as recommend_from_briefing(), but returns READY-TO-DISPLAY TEXT.

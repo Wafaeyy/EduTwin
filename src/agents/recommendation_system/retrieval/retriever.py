@@ -128,13 +128,16 @@ def discover_and_store(search_requirement, exclude_urls=None, target=TARGET_VERI
     return verified_total[:target]
 
 
-def retrieve_with_fallback(search_requirement, seen_urls=None):
-    """Runs the five tiers in order, stopping at the first that yields
-    resources this learner has not already encountered.
+def retrieve_with_fallback(search_requirement, seen_urls=None, target=TARGET_VERIFIED_RESOURCES):
+    """Runs the tiers in order, stopping at the first that yields resources
+    this learner has not already encountered.
 
     seen_urls is filtered out of EVERY tier. That is what makes an exhausted
     learner fall through to tier 5, where query variation searches the web
     with different phrasings and finds genuinely new material.
+
+    target is how many resources the caller needs. It matters only for tier 5:
+    a learner asking for 10 cannot be satisfied by a search that stops at 5.
     """
     if seen_urls is None:
         seen_urls = set()
@@ -156,7 +159,12 @@ def retrieve_with_fallback(search_requirement, seen_urls=None):
     if resources:
         return resources
 
-    # Tier 4: everything we have.
+    # Tier 4: everything we have -- ONLY when no topic was specified.
+    #
+    # A catch-all is right when we have no idea what the learner wants. It is
+    # WRONG when they named a topic: a real run returned all 47 machine
+    # learning resources to a learner who asked for calculus, because tier 4
+    # matched everything and tier 5 therefore never ran.
     if search_requirement["topic"] is None:
         relaxed_requirement["topic"] = None
         resources = exclude_seen(retrieve_from_database(relaxed_requirement), seen_urls)
@@ -165,4 +173,4 @@ def retrieve_with_fallback(search_requirement, seen_urls=None):
 
     # Tier 5: last resort -- go out to the real internet, skipping anything
     # this learner has already been shown.
-    return discover_and_store(search_requirement, exclude_urls=seen_urls)
+    return discover_and_store(search_requirement, exclude_urls=seen_urls, target=target)

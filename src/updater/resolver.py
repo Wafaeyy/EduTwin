@@ -500,9 +500,9 @@ Rules:
 6. If multiple candidates are plausible and the memory does not
    distinguish between them, select SKIP.
 
-7. candidate_index must be provided only for EXISTING.
+7. For EXISTING candidate_index must be provided.
 
-8. entity_name must be provided only for NEW.
+8. For NEW you must provide entity_name.
 
 9. Never generate or infer a UUID.
 

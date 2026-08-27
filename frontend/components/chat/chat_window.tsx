@@ -1,46 +1,37 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
 import Message from "./message";
+
 import { sendChatMessage } from "@/lib/api/chat";
 
-type ChatMessage = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
+import type { Chat } from "@/lib/chat/types";
+
+type ChatWindowProps = {
+  chat: Chat;
+  onUpdateChat: (chat: Chat) => void;
 };
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: 1,
-    role: "user",
-    content: "Explain neural networks to me.",
-  },
-  {
-    id: 2,
-    role: "assistant",
-    content:
-      "Sure! A neural network is a machine learning model inspired by the way biological neurons process information. Let's break it down step by step.",
-  },
-];
-
-export default function ChatWindow() {
-  const [messages, setMessages] =
-    useState<ChatMessage[]>(initialMessages);
-
+export default function ChatWindow({
+  chat,
+  onUpdateChat,
+}: ChatWindowProps) {
   const [input, setInput] = useState("");
-
   const [isLoading, setIsLoading] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef =
+    useRef<HTMLDivElement | null>(null);
 
+  /*
+   * Automatically scroll to the newest message.
+   */
   useEffect(() => {
-  messagesEndRef.current?.scrollIntoView({
-    behavior: "smooth",
-  });
-}, [messages, isLoading]);
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [chat.messages, isLoading]);
 
   async function handleSend() {
     const trimmedInput = input.trim();
@@ -51,16 +42,37 @@ export default function ChatWindow() {
 
     setError(null);
 
-    const userMessage: ChatMessage = {
+    const userMessage = {
       id: Date.now(),
-      role: "user",
+      role: "user" as const,
       content: trimmedInput,
     };
 
-    setMessages((currentMessages) => [
-      ...currentMessages,
+    /*
+     * Add the user's message immediately.
+     */
+    const updatedMessages = [
+      ...chat.messages,
       userMessage,
-    ]);
+    ];
+
+    /*
+     * Automatically use the first user message
+     * as the conversation title.
+     */
+    const newTitle =
+      chat.messages.length === 0
+        ? trimmedInput.slice(0, 40)
+        : chat.title;
+
+    const updatedChat: Chat = {
+      ...chat,
+      title: newTitle,
+      messages: updatedMessages,
+      updatedAt: Date.now(),
+    };
+
+    onUpdateChat(updatedChat);
 
     setInput("");
     setIsLoading(true);
@@ -70,18 +82,27 @@ export default function ChatWindow() {
         message: trimmedInput,
       });
 
-      const assistantMessage: ChatMessage = {
+      const assistantMessage = {
         id: Date.now(),
-        role: "assistant",
+        role: "assistant" as const,
         content: response.answer,
       };
 
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        assistantMessage,
-      ]);
+      const finalChat: Chat = {
+        ...updatedChat,
+        messages: [
+          ...updatedMessages,
+          assistantMessage,
+        ],
+        updatedAt: Date.now(),
+      };
+
+      onUpdateChat(finalChat);
     } catch (error) {
-      console.error("Chat request failed:", error);
+      console.error(
+        "Chat request failed:",
+        error
+      );
 
       setError(
         "Something went wrong while contacting EduTwin. Please try again."
@@ -97,22 +118,25 @@ export default function ChatWindow() {
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="mx-auto flex max-w-3xl flex-col gap-6">
           {/* Welcome */}
-          <div className="mb-4 text-center">
-            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white">
-              E
+          {chat.messages.length === 0 && (
+            <div className="mb-4 text-center">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-sm font-semibold text-white">
+                E
+              </div>
+
+              <h2 className="mt-4 text-xl font-semibold text-zinc-900">
+                How can I help you learn?
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Ask me anything about your studies,
+                skills, or career.
+              </p>
             </div>
-
-            <h2 className="mt-4 text-xl font-semibold text-zinc-900">
-              How can I help you learn?
-            </h2>
-
-            <p className="mt-1 text-sm text-zinc-500">
-              Ask me anything about your studies, skills, or career.
-            </p>
-          </div>
+          )}
 
           {/* Messages */}
-          {messages.map((message) => (
+          {chat.messages.map((message) => (
             <Message
               key={message.id}
               role={message.role}
@@ -120,7 +144,7 @@ export default function ChatWindow() {
             />
           ))}
 
-          {/* Loading indicator */}
+          {/* Loading */}
           {isLoading && (
             <div className="flex justify-start">
               <div className="rounded-2xl bg-white px-4 py-3 text-sm text-zinc-500 shadow-sm ring-1 ring-zinc-200">
@@ -135,7 +159,7 @@ export default function ChatWindow() {
               {error}
             </div>
           )}
-          {/* for scroll down effect add bottom marker */}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -148,7 +172,9 @@ export default function ChatWindow() {
               type="text"
               value={input}
               disabled={isLoading}
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) =>
+                setInput(event.target.value)
+              }
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   handleSend();
@@ -164,7 +190,9 @@ export default function ChatWindow() {
 
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim()}
+              disabled={
+                isLoading || !input.trim()
+              }
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-sm text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               ↑
@@ -172,7 +200,8 @@ export default function ChatWindow() {
           </div>
 
           <p className="mt-2 text-center text-xs text-zinc-400">
-            EduTwin uses your learning context to personalize responses.
+            EduTwin uses your learning context to
+            personalize responses.
           </p>
         </div>
       </div>

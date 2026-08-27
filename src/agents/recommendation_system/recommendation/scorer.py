@@ -19,7 +19,7 @@ from src.agents.recommendation_system.retrieval.retriever import similarity_func
 # How semantically close a resource's topic must be to what the learner asked
 # for. Above this it counts as being about that topic; below, the resource
 # scores zero and is dropped.
-TOPIC_RELEVANCE_THRESHOLD = 0.45
+TOPIC_RELEVANCE_THRESHOLD = 0.55
 
 
 def is_topic_relevant(learner_goal, resource):

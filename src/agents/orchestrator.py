@@ -291,7 +291,7 @@ class AgentOrchestrator:
         """Runs the recommendation agent."""
         from src.agents.recommendation_system.orchestrator_interface import recommend_text
 
-        reply_text = recommend_text(brief)
+        reply_text = recommend_text(brief,query)
 
         return AgentResult(
             reply=reply_text,

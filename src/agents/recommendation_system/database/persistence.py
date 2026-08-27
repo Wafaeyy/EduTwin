@@ -2,10 +2,11 @@
 The ONLY module in this project that talks to the real PostgreSQL database
 (Supabase). Everything else goes through these functions.
 
-Three tables:
+Four tables:
   resources               -- the catalog of known educational resources
   recommendation_history  -- which resources each learner has already seen
   resource_analysis       -- cached deep content analysis, shared by all learners
+  extraction_cache        -- cached LLM extractions, keyed by input text
 
 Install: pip install psycopg2-binary
 
@@ -15,6 +16,7 @@ Requires these environment variables to be set:
 
 import os
 import json
+import hashlib
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -28,6 +30,8 @@ RESOURCE_COLUMNS = ["title", "url", "description", "topic", "difficulty", "forma
 
 EVENT_SHOWN = "shown"
 EVENT_REJECTED = "rejected"
+
+MAX_FAILED_CHECKS = 5
 
 
 def get_connection():
@@ -307,8 +311,7 @@ def save_analysis(resource_url, analysis_type, analysis):
 
 def load_analysis(resource_url):
     """Returns a stored analysis, or None if this resource has never been
-    analyzed. A stored analysis is served regardless of age -- see
-    create_analysis_table.py on staleness."""
+    analyzed. A stored analysis is served regardless of age."""
     if not resource_url:
         return None
 
@@ -348,11 +351,92 @@ def count_analyses():
 
 
 # ---------------------------------------------------------------------------
-# Re-verification tracking
+# Extraction cache
 # ---------------------------------------------------------------------------
 
-MAX_FAILED_CHECKS = 5
+def hash_input(text):
+    """Stable short key for a piece of input text.
 
+    A briefing can be thousands of characters, which is far too long for a
+    primary key, so we store a hash of it instead.
+    """
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+def save_extraction(text, extraction_kind, extracted):
+    """Caches one extraction result, keyed by a hash of its input.
+
+    The same briefing or the same learner message always produces the same
+    answer, so there is no reason to pay Gemini for it twice. This also means
+    a repeat request survives an API outage -- during development Gemini
+    returned 429 and 503 on separate occasions, and with an empty learner
+    state every recommendation scored 0/100.
+    """
+    if not text or extracted is None:
+        return False
+
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO extraction_cache (input_hash, extraction_kind, extracted_json)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (input_hash) DO UPDATE
+                SET extracted_json = EXCLUDED.extracted_json,
+                    created_at = NOW();
+            """,
+            (hash_input(text), extraction_kind, json.dumps(extracted)),
+        )
+        connection.commit()
+        cursor.close()
+        return True
+    finally:
+        connection.close()
+
+
+def load_extraction(text):
+    """Returns a cached extraction for this exact input, or None."""
+    if not text:
+        return None
+
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT extracted_json FROM extraction_cache WHERE input_hash = %s;",
+            (hash_input(text),),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+    finally:
+        connection.close()
+
+    if row is None:
+        return None
+
+    try:
+        return json.loads(row[0])
+    except json.JSONDecodeError:
+        return None
+
+
+def count_extractions():
+    """How many extractions are currently cached."""
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM extraction_cache;")
+        total = cursor.fetchone()[0]
+        cursor.close()
+        return total
+    finally:
+        connection.close()
+
+
+# ---------------------------------------------------------------------------
+# Re-verification tracking
+# ---------------------------------------------------------------------------
 
 def get_resources_due_for_verification(max_age_days=30, limit=100):
     """Returns (url, failed_checks) for resources that need re-checking.
@@ -478,12 +562,14 @@ def get_verification_summary():
         return {"total": total, "never_verified": never, "with_strikes": failing, "worst_strikes": worst}
     finally:
         connection.close()
-        
+
+
 if __name__ == "__main__":
     print("=== Database contents ===")
     print(f"  {count_resources()} resource(s)")
     print(f"  {count_analyses()} cached analysis/analyses")
+    print(f"  {count_extractions()} cached extraction(s)")
 
     print("\n=== Resources ===")
     for resource in load_resources():
-        print(f"  {str(resource.format):<10} | {resource.url}")
+        print(f"  {str(resource.format):<16} | {resource.url}")

@@ -35,6 +35,11 @@ class Profile(BaseModel):
         max_length=100,
         description="Full legal or preferred name of the learner."
     )
+    
+    email: str = Field(
+        ...,
+        description="Email address of the learner."
+    )
 
     university: str = Field(
         ...,

@@ -16,7 +16,7 @@ from src.retrieval.memory_retriever import MemoryRetriever
 from src.retrieval.evidence import Evidence
 from src.retrieval.retrieval_request import RetrievalRequest
 ## TODO Graph
-from src.retrieval.knowledge_retriever import knowledge_graph_retriever
+from src.retrieval.knowledge_retriever import KnowledgeGraphRetriever
 from src.retrieval.twin_retriever import TwinRetriever
 from src.twin.student import StudentTwin
 
@@ -56,12 +56,12 @@ class RetrievalOrchestrator:
         self,
         memory_retriever: MemoryRetriever,
         twin_retriever: TwinRetriever,
-        ##graph_retriever: GraphRetriever,
+        graph_retriever: KnowledgeGraphRetriever,
     ):
 
         self.memory_retriever = memory_retriever
         self.twin_retriever = twin_retriever
-        ##self.graph_retriever = graph_retriever
+        self.graph_retriever = graph_retriever
 
         self.gemini = genai.Client()
 
@@ -95,10 +95,10 @@ class RetrievalOrchestrator:
                 )
             )
 
-        ##if request.retrieve_graph:
-          ##  evidence.extend(
-            ##    knowledge_graph_retriever(query=request)
-            ##)
+        if request.retrieve_graph:
+            evidence.extend(
+                self.graph_retriever.retrieve(query=query)
+            )
 
         return evidence
 

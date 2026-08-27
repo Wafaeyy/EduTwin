@@ -21,15 +21,16 @@ from src.agents.recommendation_system.database.persistence import (
     load_analysis,
 )
 
-# How many resources the learner actually receives.
+# How many resources the learner receives when they do not ask for a specific
+# number.
 #
 # Tier 1 returns EVERYTHING matching, and the catalogue grows with every
 # discovery run -- real runs returned 12 and then 26 resources, which is a
 # search results page, not a recommendation.
 #
-# Capping here also protects the history. Only what the learner SAW may be
-# recorded as shown; recording 26 when they saw 5 would wrongly exclude 21
-# good resources from every future request.
+# Capping also protects the history. Only what the learner SAW may be recorded
+# as shown; recording 26 when they saw 5 would wrongly exclude 21 good
+# resources from every future request.
 MAX_RECOMMENDATIONS = 5
 
 # Resources scoring below this are not shown. A weak match is worse than an
@@ -52,20 +53,19 @@ def apply_request(learner, user_request):
     just say "recommend something", their stored goal and preferences are
     exactly what should be used.
 
-    So each field is taken from the request when the message states it, and
-    from the Digital Twin when it does not.
-
-    Returns (learner, notes) -- notes lists what the request overrode, so the
-    response can say so rather than silently ignoring the learner's goal.
+    Returns (learner, notes, requested_count). requested_count is None unless
+    the learner asked for a specific number, in which case the caller uses it
+    instead of the default limit.
     """
     notes = []
+    requested_count = None
 
     if not user_request or not user_request.strip():
-        return learner, notes
+        return learner, notes, requested_count
 
     requested = extract_request(user_request)
     if not requested:
-        return learner, notes
+        return learner, notes, requested_count
 
     # topic -> goal. The most important override: it decides what we search
     # for, and it drives the topic gate in the scorer.
@@ -86,7 +86,9 @@ def apply_request(learner, user_request):
     if requested.get("duration"):
         learner["preferred_duration"] = requested["duration"]
 
-    return learner, notes
+    requested_count = requested.get("count")
+
+    return learner, notes, requested_count
 
 
 def load_history(twin_id, exclude_seen_resources):
@@ -130,8 +132,12 @@ def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_REC
     """Full pipeline.
 
     user_request is what the learner typed. Anything it explicitly asks for
-    overrides the stored Digital Twin state; anything it leaves unsaid falls
-    back to the Twin. See apply_request().
+    overrides the stored Digital Twin state -- including HOW MANY resources
+    they want. "Give me 10 videos about python" returns up to 10, not 5.
+
+    Asking for 10 does not guarantee 10: only resources that pass the topic
+    gate and clear MIN_RECOMMENDATION_SCORE are returned. Padding the list
+    with weak matches would defeat the filter.
 
     Set exclude_seen_resources=True when the learner asks for DIFFERENT
     resources than they were given before.
@@ -139,14 +145,22 @@ def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_REC
     learner = normalize_learner_state(raw_learner)
     twin_id = learner.get("twin_id")
 
-    learner, request_notes = apply_request(learner, user_request)
+    learner, request_notes, requested_count = apply_request(learner, user_request)
+
+    # The learner's own number wins over the default.
+    if requested_count:
+        limit = requested_count
+        print(f"[recommendation] Learner asked for {requested_count}; returning up to that many.")
 
     seen_urls = load_history(twin_id, exclude_seen_resources)
     if seen_urls:
         print(f"[history] Excluding {len(seen_urls)} resource(s) already seen by this learner.")
 
     search_requirement = build_search_requirement(learner)
-    resources = retrieve_with_fallback(search_requirement, seen_urls=seen_urls)
+
+    # Discovery must find at least as many as the learner asked for, or a
+    # request for 10 could never be satisfied from a five-resource search.
+    resources = retrieve_with_fallback(search_requirement, seen_urls=seen_urls, target=limit)
     verified_resources = verify_resources(resources)
 
     if not verified_resources:
@@ -168,6 +182,11 @@ def get_recommendations(raw_learner, exclude_seen_resources=False, limit=MAX_REC
         if len(strong) < len(ranked):
             dropped = len(ranked) - len(strong)
             print(f"[recommendation] Dropped {dropped} resource(s) scoring below {MIN_RECOMMENDATION_SCORE}.")
+        if requested_count and len(recommendations) < requested_count:
+            message = (
+                f"Only {len(recommendations)} strong match(es) were found, "
+                f"fewer than the {requested_count} requested."
+            )
     else:
         # Nothing cleared the bar. Return the best available rather than
         # nothing, but say plainly that these are weak matches.
@@ -285,7 +304,7 @@ def get_recommendation_with_content(raw_learner, exclude_seen_resources=False,
     # Analyse against the topic actually searched for, which may be the
     # request's topic rather than the stored goal.
     learner = normalize_learner_state(raw_learner)
-    learner, _ = apply_request(learner, user_request)
+    learner, _, _ = apply_request(learner, user_request)
 
     result["top_resource_content"] = analyze_single_resource(
         top_recommendation["url"],
@@ -322,23 +341,30 @@ if __name__ == "__main__":
     print(f"Stored Twin state: goal={learner['goal']!r}, format={learner['preferred_format']!r}, "
           f"level={learner['level']!r}, duration={learner['preferred_duration']!r}")
 
-    print("\n\n=== 1. No request -- uses the stored goal ===")
+    print("\n\n=== 1. No request -- uses the stored goal, default of 5 ===")
     result = get_recommendations(learner)
     print(f"Message: {result['message']}")
-    print(f"Returned {len(result['recommendations'])} resource(s).")
+    print(f"Returned {len(result['recommendations'])} resource(s).  <- should be 5 or fewer")
     for record in result["recommendations"]:
         print_recommendation(record, detailed=False)
 
-    print("\n\n=== 2. Request names a COMPLETELY different topic ===")
+    print("\n\n=== 2. Learner asks for a SPECIFIC NUMBER ===")
+    result = get_recommendations(learner, user_request="give me 8 videos about machine learning")
+    print(f"Message: {result['message']}")
+    print(f"Returned {len(result['recommendations'])} resource(s).  <- should be up to 8")
+    for record in result["recommendations"]:
+        print(f"  {record['score']:>3} | {record['url']}")
+
+    print("\n\n=== 3. Request names a COMPLETELY different topic ===")
     print("Off-topic resources must score 0 and be dropped, forcing discovery.")
-    result = get_recommendations(learner, user_request="recommend videos about calculus")
+    result = get_recommendations(learner, user_request="recommend 3 videos about calculus")
     print(f"Notes: {result['notes']}")
     print(f"Message: {result['message']}")
-    print(f"Returned {len(result['recommendations'])} resource(s).")
+    print(f"Returned {len(result['recommendations'])} resource(s).  <- should be up to 3")
     for record in result["recommendations"]:
         print_recommendation(record, detailed=True)
 
-    print("\n\n=== 3. Vague request -- falls back to stored state ===")
+    print("\n\n=== 4. Vague request -- falls back to stored state and default ===")
     result = get_recommendations(learner, user_request="recommend something for me")
     print(f"Notes: {result['notes']}  <- should be empty")
     print(f"Returned {len(result['recommendations'])} resource(s).")
