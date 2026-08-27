@@ -71,6 +71,7 @@ class AgentOrchestrator:
         self._api_key = api_key
         self.classifier = IntentClassifier(model=model, client=client, api_key=api_key)
         self.role_profiles = role_profiles or DEFAULT_ROLE_PROFILES
+        self.history: list[str] = [] 
 
         # Load system prompts
         prompts_dir = Path(__file__).parent / "prompts"
@@ -117,6 +118,11 @@ class AgentOrchestrator:
         Returns:
             AgentResult containing clean reply, signals, proposals, and metadata.
         """
+                # Use the orchestrator's own running history unless the caller
+        # explicitly passed one in. Capped at the last 3 exchanges (6 lines)
+        # so old turns from unrelated topics don't pollute the current one.
+        if history is None:
+            history = self.history[-6:]
         # Step 1: Detect intent and choose agent
         intent_decision = forced_intent or self.classifier.classify(
             query=query, context_summary=brief
@@ -166,20 +172,22 @@ class AgentOrchestrator:
             if not target_role:
                 target_role = "machine_learning_engineer"
 
-            return self._run_mentor(query, intent, brief, history, target_role)
-
+            result = self._run_mentor(query, intent, brief, history, target_role)
         elif target_agent == AgentType.RECOMMENDATION_SYSTEM:
-            return self._run_recommender(query, intent, brief, twin)
-
+            result = self._run_recommender(query, intent, brief, twin)
         elif target_agent == AgentType.EXPLAINABILITY:
-            return self._run_explainer(query, intent, brief, history)
-
+            result = self._run_explainer(query, intent, brief, history)
         elif target_agent == AgentType.STUDY_COACH:
-            return self._run_coach(query, intent, brief, history)
-
+            result = self._run_coach(query, intent, brief, history)
         else:
-            # Fallback to Study Coach
-            return self._run_coach(query, intent, brief, history)
+            result = self._run_coach(query, intent, brief, history)
+
+        # Record this turn AFTER the agent has answered, so the next call's
+        # history includes it.
+        self.history.append(f"Student: {query}")
+        self.history.append(f"Assistant: {result.reply}")
+
+        return result
 
     def _run_coach(
         self,
