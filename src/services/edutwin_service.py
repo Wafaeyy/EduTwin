@@ -4,9 +4,11 @@ from src.retrieval.context_builder import ContextBuilder
 from src.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 from src.retrieval.memory_retriever import MemoryRetriever, MemoryStore
 from src.retrieval.twin_retriever import TwinRetriever, TwinStore, StudentTwin
+from src.retrieval.knowledge_retriever import KnowledgeGraphRetriever
+
 
 from src.memory.memory_decision import MemoryDecision
-
+from src.knowledge_graph.knowledge_graph import KnowledgeGraph
 from src.updater.updater import TwinUpdater
 from src.updater.interest_updater import InterestUpdater
 from src.updater.preference_updater import PreferenceUpdater
@@ -94,10 +96,13 @@ class EduTwinService:
         self.twin_retriever = TwinRetriever(
             twin_store=self.twin_store
         )
+        knowledge_graph = KnowledgeGraph(self.twin)
+        self.knowledge_retriever = KnowledgeGraphRetriever(knowledge_graph=knowledge_graph)
 
         self.retrieval_orchestrator = RetrievalOrchestrator(
             memory_retriever=self.memory_retriever,
             twin_retriever=self.twin_retriever,
+            graph_retriever=self.knowledge_retriever
         )
 
         # Memory system
