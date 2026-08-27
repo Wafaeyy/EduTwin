@@ -30,98 +30,133 @@
 #                evidence.append(knowledge_to_evidence(p))
 #
 #    return evidence
-from typing import Optional
-from src.knowledge_graph.knowledge_graph import KnowledgeGraph, KnowledgeNode, extract_concept
+from src.knowledge_graph.knowledge_graph import (
+    KnowledgeGraph,
+    KnowledgeNode,
+    extract_concept,
+)
 from src.retrieval.evidence import Evidence
 from src.twin.enums import EvidenceSource
 
 
 class KnowledgeGraphRetriever:
     """
-    Object responsible for querying the student's KnowledgeGraph 
-    and returning structured Evidence for the Twin.
+    Retrieves knowledge-graph evidence relevant to a user query.
+
+    The retriever works through the KnowledgeGraph abstraction
+    rather than directly manipulating the underlying NetworkX graph.
     """
 
     def __init__(self, knowledge_graph: KnowledgeGraph):
-        # Injected dependency: No more floating global G!
         self.kg = knowledge_graph
 
     def retrieve(self, query: str) -> list[Evidence]:
-        """Extracts concepts and returns the neighborhood evidence."""
+        """
+        Extract concepts from the query and retrieve:
+
+        1. The matching target concept.
+        2. Its prerequisites.
+        3. Its advanced concepts/applications.
+        """
+
         concepts = extract_concept(query)
+
         evidence: list[Evidence] = []
-        seen = set()
+        seen: set[str] = set()
 
-        for c in concepts:
-            # Call methods on self.kg instead of loose functions
-            node_name = self.kg.search_node(c["concept"], c["description"], create=False)
+        for concept in concepts:
 
-            if node_name is None or node_name in seen:
+            node_name = self.kg.search_node(
+                name=concept["concept"],
+                description=concept["description"],
+                create=False,
+            )
+
+            if node_name is None:
+                continue
+
+            if node_name in seen:
                 continue
 
             seen.add(node_name)
-            node = self.kg.search_node(node_name)
-            if node:
-                evidence.append(self._to_evidence(node, "Target Concept"))
 
-            # 1. Prerequisites (Predecessors)
-            for p in self.kg.get_node_predecessors(node_name):
-                if p.knowledge.title not in seen:
-                    seen.add(p.knowledge.title)
-                    evidence.append(self._to_evidence(p, f"Prerequisite of {node_name}"))
+            # --------------------------------------------------
+            # Target concept
+            # --------------------------------------------------
 
-            # 2. Advanced applications (Successors)
-            for s in self.kg.get_node_successors(node_name):
-                if s.knowledge.title not in seen:
-                    seen.add(s.knowledge.title)
-                    evidence.append(self._to_evidence(s, f"Advanced application of {node_name}"))
+            node = self.kg.G.nodes[node_name]["knowledgeNode"]
+
+            evidence.append(
+                self._to_evidence(
+                    node,
+                    "Target Concept",
+                )
+            )
+
+            # --------------------------------------------------
+            # Prerequisites
+            # --------------------------------------------------
+
+            for prerequisite in self.kg.get_node_predecessors(node_name):
+
+                prerequisite_name = prerequisite.knowledge.title
+
+                if prerequisite_name in seen:
+                    continue
+
+                seen.add(prerequisite_name)
+
+                evidence.append(
+                    self._to_evidence(
+                        prerequisite,
+                        f"Prerequisite of {node_name}",
+                    )
+                )
+
+            # --------------------------------------------------
+            # Advanced concepts / applications
+            # --------------------------------------------------
+
+            for successor in self.kg.get_node_successors(node_name):
+
+                successor_name = successor.knowledge.title
+
+                if successor_name in seen:
+                    continue
+
+                seen.add(successor_name)
+
+                evidence.append(
+                    self._to_evidence(
+                        successor,
+                        f"Advanced application of {node_name}",
+                    )
+                )
 
         return evidence
 
     @staticmethod
-    def _to_evidence(node: KnowledgeNode, relationship: str) -> Evidence:
-        k = node.knowledge
+    def _to_evidence(
+        node: KnowledgeNode,
+        relationship: str,
+    ) -> Evidence:
+
+        knowledge = node.knowledge
+
         return Evidence(
             source=EvidenceSource.GRAPH,
             content=(
-                f"--- Educational Knowledge Graph: {relationship} ---\n"
-                f"Topic: {k.title}\n"
-                f"Description: {k.description}\n"
-                f"Student Mastery: {k.mastery:.1%} (Confidence: {k.confidence:.1%})"
+                f"--- Educational Knowledge Graph: "
+                f"{relationship} ---\n"
+                f"Topic: {knowledge.title}\n"
+                f"Description: {knowledge.description}\n"
+                f"Student Mastery: {knowledge.mastery:.1%}\n"
+                f"Confidence: {knowledge.confidence:.1%}"
             ),
-            reference_id=k.knowledge_id,
+            reference_id=knowledge.knowledge_id,
             metadata={
-                "mastery": k.mastery,
-                "confidence": k.confidence,
+                "mastery": knowledge.mastery,
+                "confidence": knowledge.confidence,
                 "relationship": relationship,
             },
         )
-
-
-
-
-
-
-
-
-def knowledge_to_evidence(
-    node: KnowledgeNode,
-) -> Evidence:
-
-    k = node.knowledge
-
-    return Evidence(
-        source=EvidenceSource.GRAPH,
-        content=(
-            "Knowledge Graph\n"
-            f"Topic: {k.title}\n"
-            f"Description: {k.description}\n"
-            f"Mastery: {k.mastery:.2f}\n"
-            f"Confidence: {k.confidence:.2f}"
-        ),
-        reference_id=k.knowledge_id,
-        metadata={
-            "mastery": k.mastery,
-            "confidence": k.confidence,
-        },
-    )

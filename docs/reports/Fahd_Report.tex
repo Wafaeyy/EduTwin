@@ -1,0 +1,988 @@
+% =====================================================================
+%  EduTwin - Team Beta
+%  Resource Recommendation Engine
+%  Technical design, architecture, and integration reference
+%
+%  Compile with:  pdflatex main.tex   (run twice for the table of contents)
+%  Only standard TeX Live packages are used.
+% =====================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+% Optional: nicer fonts if available, silently skipped on minimal installs.
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}}{}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{parskip}
+\usepackage[hidelinks]{hyperref}
+
+% ---------------------------------------------------------------------
+% Colours
+% ---------------------------------------------------------------------
+\definecolor{navy}{HTML}{1F3864}
+\definecolor{slate}{HTML}{44546A}
+\definecolor{rule}{HTML}{BFBFBF}
+\definecolor{headshade}{HTML}{E8EDF5}
+\definecolor{altshade}{HTML}{F5F7FA}
+\definecolor{codebg}{HTML}{F4F4F4}
+
+% ---------------------------------------------------------------------
+% Headings
+% ---------------------------------------------------------------------
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{navy}}{\thesection.}{0.6em}{}
+  [\vspace{2pt}{\color{rule}\titlerule[0.6pt]}]
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{slate}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{18pt}{8pt}
+\titlespacing*{\subsection}{0pt}{14pt}{5pt}
+
+% ---------------------------------------------------------------------
+% Header / footer
+% ---------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\footnotesize\color{slate}EduTwin \textperiodcentered\ Resource Recommendation Engine}
+\fancyfoot[C]{\footnotesize\color{slate}\thepage}
+
+% ---------------------------------------------------------------------
+% Inline code and code blocks
+% ---------------------------------------------------------------------
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+\lstdefinestyle{plain}{
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{codebg},
+  frame=none,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  xleftmargin=10pt,
+  framexleftmargin=10pt,
+  framexrightmargin=10pt,
+  framextopmargin=5pt,
+  framexbottommargin=5pt,
+  aboveskip=10pt,
+  belowskip=10pt
+}
+\lstset{style=plain}
+
+% ---------------------------------------------------------------------
+% Callout box - no extra packages, just xcolor + minipage
+% ---------------------------------------------------------------------
+\newsavebox{\calloutbox}
+\newenvironment{callout}[1]
+  {\par\vspace{8pt}\noindent
+   \begin{lrbox}{\calloutbox}
+   \begin{minipage}{\dimexpr\textwidth-2\fboxsep-8pt\relax}
+   \vspace{4pt}
+   {\bfseries\color{navy}#1}\par\vspace{4pt}}
+  {\vspace{4pt}\end{minipage}%
+   \end{lrbox}%
+   \noindent\textcolor{navy}{\rule[-\dp\calloutbox]{3pt}{\dimexpr\ht\calloutbox+\dp\calloutbox\relax}}%
+   \colorbox{headshade}{\usebox{\calloutbox}}%
+   \par\vspace{10pt}}
+
+% ---------------------------------------------------------------------
+% Table helpers
+% ---------------------------------------------------------------------
+\newcommand{\thead}[1]{\textcolor{white}{\bfseries\small #1}}
+\newcommand{\headrow}{\rowcolor{navy}}
+\usepackage{colortbl}
+\renewcommand{\arraystretch}{1.25}
+
+% Principle block
+\newcommand{\principle}[2]{%
+  \vspace{8pt}\noindent{\bfseries\color{navy}#1}\par
+  \vspace{2pt}\noindent\hspace{6pt}%
+  \textcolor{headshade}{\rule{2.5pt}{1em}}\hspace{6pt}%
+  \begin{minipage}{\dimexpr\textwidth-20pt\relax}#2\end{minipage}\par\vspace{4pt}}
+
+\setlist[itemize]{leftmargin=1.4em,itemsep=2pt,topsep=4pt}
+\setlist[enumerate]{leftmargin=1.6em,itemsep=3pt,topsep=4pt}
+
+\begin{document}
+
+% =====================================================================
+% TITLE PAGE
+% =====================================================================
+\thispagestyle{empty}
+\vspace*{5cm}
+\begin{center}
+{\small\color{slate}\bfseries\spaceskip=0.5em EDUTWIN \textperiodcentered\ TEAM BETA}\\[10pt]
+{\Huge\bfseries\color{navy} Resource Recommendation Engine}\\[10pt]
+{\color{rule}\rule{0.75\textwidth}{0.6pt}}\\[14pt]
+{\large\itshape\color{slate} Technical design, architecture, and integration reference}\\[16pt]
+\begin{minipage}{0.78\textwidth}
+\centering\small
+A deterministic, explainable recommendation engine that consumes a
+continuously evolving Digital Twin, reads what the learner is asking for
+right now, and remembers every resource it has ever shown them.
+\end{minipage}\\[3.5cm]
+{\small\itshape\color{slate} Second revision}\\[4pt]
+{\small\color{slate} AI Research Internship \textperiodcentered\ Multi-Agent Educational Digital Twin System}
+\end{center}
+\newpage
+
+% =====================================================================
+% CONTENTS
+% =====================================================================
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Overview}
+
+The Resource Recommendation Engine is one component of the EduTwin multi-agent
+educational system. Its job is to recommend educational resources --- videos,
+playlists, courses, articles, tutorials, documentation, research papers, and
+practice platforms --- that are genuinely useful, verified as reachable, and
+personalised to the individual learner.
+
+It is not a search wrapper and it is not a prompt. It is a deterministic
+pipeline that reads both the learner's stored profile and what they have just
+asked for, retrieves candidates through five progressively relaxed strategies,
+verifies them against the live internet, scores them with transparent
+arithmetic, refuses to return anything off-topic, and remembers what it has
+already shown each person.
+
+\subsection{The research question}
+
+\begin{callout}{Guiding question}
+How should AI agents consume a continuously evolving Digital Twin to produce
+personalised, explainable, and adaptive educational guidance that outperforms
+a traditional stateless LLM assistant?
+\end{callout}
+
+\textbf{Core thesis:} personalisation should be an architectural property of
+the AI system, not merely a prompt-engineering trick.
+
+\subsection{How this component answers it}
+
+The clearest demonstration is the learner history system. A stateless
+assistant has no memory of what it recommended; this engine stores it, keyed
+to the learner, in a real database. The difference is directly observable:
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\headrow \thead{Learner action} & \thead{Stateless LLM assistant} & \thead{This engine} \\
+\midrule
+Asks the same question twice & May give different answers at random & Identical answer, by design \\
+\rowcolor{altshade} Says ``recommend something else'' & Often repeats itself --- no memory of what it said & Excludes everything shown; searches with varied queries for genuinely new material \\
+Rejects a resource & Forgotten immediately & Permanently excluded, across sessions \\
+\rowcolor{altshade} Asks why a resource was chosen & Post-hoc rationalisation & Exact score breakdown, generated from the arithmetic \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\textbf{Reproducibility is deliberate.} The same learner asking the same
+question receives the same answer, so any recommendation can be explained,
+audited, and defended. Variety is available --- but it must be explicitly
+requested, not delivered by accident.
+
+\begin{callout}{Stated honestly}
+The learner history system requires a learner identifier, and the integrated
+system does not currently supply one. In the live pipeline, this feature is
+inert. Section 10 covers this in full.
+\end{callout}
+
+% =====================================================================
+\newpage
+\section{The governing architectural principle}
+
+\begin{callout}{Non-negotiable}
+Large language models must NOT make the final recommendation decision.
+\par\vspace{4pt}
+LLMs are used only for: understanding natural-language requests, extracting
+structured fields from prose, interpreting unstructured resource content, and
+generating explanations. All filtering, scoring, ranking, and the final
+decision are 100\% deterministic code.
+\end{callout}
+
+This constraint drives every design decision in the component. Scoring is
+plain arithmetic rather than ``ask a model which is best,'' because arithmetic
+is reproducible, debuggable, and can be shown to a learner as a justification.
+
+\subsection{Where the principle proved its worth}
+
+During development a significant bug was found: every resource discovered from
+the internet was claiming to be a video and collecting thirty unearned scoring
+points. The cause was a single line assuming that searching for videos
+guarantees video results --- in reality the search returned a YouTube
+playlist, a social-media discovery page, and two documentation pages, all
+labelled ``video.''
+
+The bug was visible because the score breakdown is printed transparently: a
+resource showing \code{format 30} beside a category-listing URL is obviously
+wrong. A system that asked a model to rank resources would have produced a
+confident, plausible, and equally incorrect answer --- with nothing to
+inspect.
+
+\subsection{Division of responsibility}
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{5.2cm} >{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Concern} & \thead{Handled by} & \thead{Why} \\
+\midrule
+Understanding what the learner said & LLM (Orchestrator) & Natural language is exactly what models are good at \\
+\rowcolor{altshade} Extracting fields from a prose briefing & LLM (context extractor) & Same reason; heavily guard-railed \\
+Reading the learner's immediate request & LLM (request extractor) & Same reason; falls back to deterministic keywords \\
+\rowcolor{altshade} Interpreting video and article content & LLM (content analyzers) & Unstructured content requires comprehension \\
+Inferring difficulty and format & Deterministic code & Feeds sixty of one hundred scoring points \\
+\rowcolor{altshade} Judging topic relevance & Deterministic code (embeddings) & Decides whether a resource is shown at all \\
+Filtering, scoring, ranking & Deterministic code & Must be reproducible and explainable \\
+\rowcolor{altshade} The final recommendation & Deterministic code & The core claim of the research \\
+\bottomrule
+\end{tabularx}
+
+% =====================================================================
+\newpage
+\section{How the engine works}
+
+A single function call runs the entire pipeline. The caller supplies two
+strings --- the learner's stored briefing and the message they just typed ---
+and receives ranked, explained, verified recommendations.
+
+\subsection{The pipeline}
+
+\begin{lstlisting}
+Two strings arrive: the briefing, and the learner's message
+  |  extract learner state from the briefing   (cache -> Gemini)
+  |  extract the request from the message      (cache -> Gemini -> keywords)
+  |  APPLY REQUEST: the request wins, memory fills the gaps
+  |  normalise (field aliases, reject invalid values)
+  |  load this learner's history from PostgreSQL
+  |  build the search requirement (topic, level, format)
+  |
+  +- TIER 1  exact topic + exact level           | each filtered against
+  +- TIER 2  exact topic, any level              | history; stops at the
+  +- TIER 3  semantic match (neural)             | first tier that yields
+  +- TIER 4  entire catalogue - ONLY if no topic | unseen resources
+  +- TIER 5  external internet discovery         |
+        +- query variation (8 templates, neutral first)
+        +- analyse   (infer difficulty and format)
+        +- verify    (structure -> blocklist -> homepage -> parallel HTTP)
+        +- store     (save all verified to the shared catalogue)
+  |  score every resource  (format 30 / level 30 / duration 20 / goal 20)
+  |  TOPIC GATE: off-topic resources score zero
+  |  rank, drop anything below 50, cap at 5 or the number requested
+  |  record what was shown
+  |  deep content analysis of the top resource only (cached, shared)
+  |  format as readable text
+\end{lstlisting}
+
+\subsection{Tiered retrieval}
+
+Each tier is a deliberate relaxation of constraints. The engine never returns
+nothing when something reasonable exists --- but it never pretends a loose
+match is a tight one either.
+
+\textbf{Tier 4 only runs when no topic was specified.} A catch-all is right
+when the engine has no idea what the learner wants; it is wrong when they
+named one. A real run returned all forty-seven machine learning resources to a
+learner asking for calculus, because the catch-all matched everything and
+internet discovery therefore never ran.
+
+Every tier is also filtered against the learner's history. That is what makes
+an exhausted learner fall through to fresh discovery rather than receiving an
+empty result or a repeat.
+
+\subsection{Query variation}
+
+When a learner has seen everything the obvious search returns, the engine
+escalates through eight fixed search phrasings:
+
+\begin{lstlisting}
+1.  {topic} {level} {format}       5.  how to {topic} {format}
+2.  {topic} {format}               6.  {topic} full guide {format}
+3.  best {topic} {format}          7.  learn {topic} from scratch {format}
+4.  {topic} explained {format}     8.  {topic} crash course {format}
+\end{lstlisting}
+
+\textbf{The neutral phrasings come first, deliberately.} An earlier version
+opened with the learning-oriented templates, which produced ``learn messi from
+scratch video'' for a non-academic topic --- unnatural phrasing that searches
+badly. Templates one to four work for any subject; five to eight are the
+academic escalation, used only when the plain searches run dry.
+
+In the normal case only the first template runs, so the mechanism costs
+nothing until it is needed. Because the list is fixed and ordered --- not
+generated by a model --- the same topic with the same exclusion set always
+produces the same query sequence. Adaptive behaviour without sacrificing
+reproducibility.
+
+% =====================================================================
+\newpage
+\section{Reading the learner's request}
+
+A learner's goal is long-term: ``become a machine learning engineer.'' Their
+request is immediate: ``show me videos about calculus.'' An early version of
+the engine read only the goal, so a learner asking about calculus received
+machine learning resources.
+
+\begin{callout}{The rule}
+THE REQUEST WINS, MEMORY FILLS THE GAPS.
+\par\vspace{4pt}
+Each field is taken from the learner's message when it states one, and from
+the Digital Twin when it does not. ``Recommend videos about calculus''
+searches calculus at the learner's stored level and duration. ``Recommend
+something'' uses the stored profile entirely.
+\end{callout}
+
+When the request overrides the stored goal, the response says so rather than
+silently searching for something the profile does not expect:
+
+\begin{lstlisting}
+Searching for 'calculus' as requested, rather than the stored goal
+'machine learning'.
+\end{lstlisting}
+
+\subsection{Three extraction layers}
+
+Reading the request is attempted three ways, cheapest and most reliable first:
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\headrow \thead{Layer} & \thead{What it does} & \thead{When it runs} \\
+\midrule
+1 \textperiodcentered\ Cache & Returns a previously extracted result for this exact message & Always tried first --- free, instant, immune to API outages \\
+\rowcolor{altshade} 2 \textperiodcentered\ Gemini & Full understanding: any phrasing, any language, expands abbreviations & When the cache misses \\
+3 \textperiodcentered\ Keywords & Deterministic pattern matching on common request shapes & Only when Gemini is unavailable \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\textbf{The third layer exists because the API failed repeatedly in real use}
+--- quota exhausted, servers overloaded, and once an unset key. With no
+extraction at all, the learner state is empty and every recommendation scores
+zero out of one hundred. Keyword results are deliberately not cached, so a
+crude answer is never reused in place of the better one once the API recovers.
+
+\subsection{Abbreviations and counts}
+
+The extracted topic is used directly as an internet search query, so shorthand
+is expanded: ``calc'' becomes ``calculus'', ``ml'' becomes ``machine
+learning'', ``linalg'' becomes ``linear algebra''. Proper nouns --- names of
+people, games, products --- are left exactly as written.
+
+A learner may also ask for a specific number. ``Give me ten videos about
+python'' returns up to ten rather than the default five. The value is clamped
+between one and twenty, so an extreme request cannot trigger hundreds of
+network verifications.
+
+\textbf{Asking for ten does not guarantee ten.} Only resources that pass the
+topic gate and clear the quality floor are returned; padding the list with
+weak matches would defeat the filter. The response says so plainly: ``Only six
+strong matches were found, fewer than the ten requested.''
+
+% =====================================================================
+\newpage
+\section{Scoring, the topic gate, and the quality floor}
+
+One hundred points, four factors, plain arithmetic:
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4cm} >{\centering\arraybackslash}p{1.8cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Factor} & \thead{Points} & \thead{Awarded when} \\
+\midrule
+Format match & 30 & The learner's preferred format is known and matches \\
+\rowcolor{altshade} Level match & 30 & The learner's level is known and matches \\
+Duration match & 20 & The learner's preferred duration is known and matches \\
+\rowcolor{altshade} Goal relevance & 20 & The resource is genuinely about the requested topic \\
+\textbf{Total} & \textbf{100} & \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+A factor earns points only if the learner's value is known \emph{and} matches.
+It never guesses a match for missing data. A separate confidence value between
+zero and one reports how much of the learner's profile was actually available,
+so a low score caused by an unknown profile is distinguishable from a low
+score caused by a genuinely poor match.
+
+\subsection{The topic gate}
+
+\begin{callout}{The rule}
+When the learner has named a topic, a resource that is not about that topic
+scores ZERO --- whatever else it matches.
+\end{callout}
+
+A machine learning video is not a useful answer to ``recommend videos about
+calculus'' just because the format happens to be right. Before this gate
+existed, a real run returned exactly that, at thirty out of one hundred,
+purely on the format match.
+
+\textbf{Relevance is judged semantically, not by string equality.} A resource
+stored under ``machine learning'' still counts for a request about ``machine
+learning basics''. Exact matching would reject it, throw away almost the
+entire catalogue, and force a web search on nearly every request.
+
+The gate is applied identically in the scorer and in the decision-record
+builder, so a record's score and its stated reasons can never disagree. An
+off-topic resource's reason reads: ``Not about `calculus', which is what was
+requested.''
+
+\subsection{The quality floor}
+
+Resources scoring below fifty are not shown. A weak match is worse than an
+honest ``nothing good found'' --- it wastes the learner's time and makes the
+engine look careless.
+
+With one safeguard: \textbf{if nothing clears the bar, the best available are
+returned anyway, with a message saying none scored fifty or above.} Never
+return nothing when something exists, but never present a weak match as though
+it were a good one either.
+
+% =====================================================================
+\newpage
+\section{Quality, safety, and verification}
+
+A recommendation engine that surfaces dead links, pirated material, or content
+farms is worse than no engine at all. Four gates run on every candidate,
+ordered cheapest first so that a network request is never spent on a resource
+that was always going to be rejected.
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3.2cm}}
+\headrow \thead{Gate} & \thead{Check} & \thead{Cost} \\
+\midrule
+1 \textperiodcentered\ Structural & Title, URL, and topic must all be present & Free \\
+\rowcolor{altshade} 2 \textperiodcentered\ Domain policy & URL must not match the blocklist & Free \\
+3 \textperiodcentered\ Homepage & A site's front door is not a resource & Free \\
+\rowcolor{altshade} 4 \textperiodcentered\ Reachability & Real HTTP request; status code below 400 & One network call \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\subsection{The homepage gate}
+
+Added after a real run recommended a bare site homepage as a machine learning
+resource scoring fifty out of one hundred, \textbf{purely because the page
+title contained the word ``learning''.} A homepage has no specific content, no
+difficulty and no single topic. There is nothing to recommend, whatever it
+scores.
+
+\subsection{Domain policy}
+
+Real discovery runs surfaced pirated-course sites, social-media discovery
+pages, anonymous free-hosting subdomains, a video-scraper site, and
+stock-media libraries selling machine learning footage --- alongside genuinely
+excellent material from Google, Microsoft Learn, and freeCodeCamp. The scoring
+system cannot tell them apart, because quality is not one of its four factors.
+
+The policy holds two lists with deliberately different powers:
+
+\begin{itemize}
+\item \textbf{Blocked domains} --- piracy, social feeds, anonymous hosting,
+content farms, stock media, and vendor product pages. Refused outright.
+\item \textbf{Trusted domains} --- universities, official documentation,
+established platforms. Marked as trusted, but nothing is rejected for failing
+the check.
+\end{itemize}
+
+\textbf{A domain on neither list is allowed through as neutral.} Blocking is
+deliberate, trust is a bonus, and everything else is permitted --- an
+allowlist-only approach would starve the catalogue of good material from sites
+nobody thought to list.
+
+This list needs ongoing curation. New categories of junk kept appearing
+throughout development, each discovered by inspecting real output rather than
+anticipated in advance.
+
+\subsection{Parallel verification}
+
+Verifying URLs one at a time means adding up the waiting. Fifteen URLs with a
+five-second timeout each produced waits of up to two minutes in real runs,
+since a dead link burns the full timeout before failing.
+
+The network gate now runs across a thread pool. Threads are the correct tool
+here specifically because this is network waiting rather than calculation ---
+Python releases its global lock while waiting on a socket, so the other
+threads genuinely run. Result ordering is preserved, which matters because
+ranking depends on it.
+
+\begin{callout}{Measured result}
+8 URLs, sequential: 5.4 seconds. Parallel: 0.8 seconds. 7.1$\times$ faster,
+with identical results and preserved ordering.
+\end{callout}
+
+\subsection{Ongoing catalogue audit}
+
+Links die. A separate audit script re-checks stored resources on a schedule
+--- never during a learner's request. A resource is deleted only after five
+consecutive failures; the count resets to zero on any success, so a link that
+usually works never accumulates strikes.
+
+\begin{callout}{Safety net}
+If more than 70\% of a batch fails at once, that is almost certainly a local
+network problem rather than that many simultaneously dead links. The run
+aborts and records nothing.
+\par\vspace{4pt}
+This guard was written after two total network outages during development.
+Without it, either one would have deleted the entire catalogue.
+\end{callout}
+
+% =====================================================================
+\newpage
+\section{Data design}
+
+Four tables in a live cloud PostgreSQL database. Each carries constraints
+chosen to make invalid states structurally impossible rather than something
+the application layer must remember to prevent.
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{4cm}}
+\headrow \thead{Table} & \thead{Holds} & \thead{Shared across learners?} \\
+\midrule
+\code{resources} & Every resource the engine knows about & Yes --- the catalogue grows with use \\
+\rowcolor{altshade} \code{recommendation\_history} & What each learner has been shown or has rejected & No --- keyed per learner \\
+\code{resource\_analysis} & Cached deep content analysis & Yes --- analysed once, ever \\
+\rowcolor{altshade} \code{extraction\_cache} & Cached LLM extractions, keyed by input text & Yes \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\subsection{recommendation\_history --- learner memory}
+
+The table that makes the engine stateful, and therefore the table that carries
+the research claim. Four design decisions are worth explaining:
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{5cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Decision} & \thead{Rationale} \\
+\midrule
+Composite primary key on (twin\_id, resource\_url) & One row per learner per resource, ever. A learner cannot simultaneously be ``shown'' and ``rejected'' for the same resource --- rejecting updates the existing row. Contradictory state is impossible rather than something a query must resolve. \\
+\rowcolor{altshade} Foreign key targets url, not the integer id & Serial IDs are reassigned whenever the table is rebuilt, which would silently repoint a learner's history at the wrong resources. URLs are stable identities. \\
+event is text with a CHECK, not a boolean & Three states are needed: never shown (no row), shown (mild signal), rejected (permanent). A boolean cannot express that. The constraint also stops typos silently never matching a query. \\
+\rowcolor{altshade} ON DELETE CASCADE & Deleting a resource removes its history rows, keeping the data consistent. The trade-off is documented in the limitations section. \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\subsection{The two caches}
+
+Deep content analysis costs an API call per resource; so does reading a
+briefing or a request. Both are cached, and both caches are shared across
+every learner --- work paid for by one benefits all.
+
+\textbf{Only successful results are cached.} Storing a failure would freeze a
+temporary API outage permanently, and that resource could never be analysed
+again. This distinction proved its value immediately: a live ``service
+unavailable'' error was served correctly from cache moments later, with no API
+call at all.
+
+The extraction cache is keyed by a hash of the input text rather than the text
+itself --- a briefing can run to thousands of characters, far too long for a
+primary key. Beyond saving API calls, it closes a reproducibility gap: the
+same briefing now always yields the same extraction, which prose extraction
+alone could not guarantee.
+
+% =====================================================================
+\newpage
+\section{Integration contract}
+
+The engine exposes one simple entry point. Everything behind it is internal
+and free to change.
+
+\begin{lstlisting}
+from orchestrator_interface import recommend_text
+
+text = recommend_text(briefing_string, user_request_string)
+\end{lstlisting}
+
+\subsection{Two inputs, both strings}
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Input} & \thead{What it is} & \thead{Why it matters} \\
+\midrule
+\code{briefing} & The context builder's prose output & The learner's stored goal, level, preferred format and duration \\
+\rowcolor{altshade} \code{user\_request} & What the learner just typed & What they want right now, which overrides the stored profile \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+Two optional flags: one to exclude everything the learner has already been
+shown, and one to skip deep content analysis for a faster response. The output
+is ready-to-display text.
+
+\subsection{The structured variant}
+
+A second function returns the same result as a dictionary rather than text.
+Use it when the interface needs individual fields --- clickable links, score
+badges, a reject button. Those values cannot be recovered reliably from
+formatted text.
+
+The response carries the recommendation list, each with its URL, format,
+score, full score breakdown, human-readable reasons, and confidence value;
+plus the deep analysis of the top resource and a field naming which resource
+that analysis belongs to.
+
+\textbf{That last field matters.} The interface should match the analysis to a
+resource by URL rather than assuming it belongs to the first item --- if
+ranking behaviour ever changes, matching by URL keeps the display correct.
+
+\subsection{Three intents}
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{5.4cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Intent} & \thead{Purpose} \\
+\midrule
+\code{resource\_recommendation} & Retrieve, score, and rank resources. Returns deep content analysis of the top result. \\
+\rowcolor{altshade} \code{reject\_resources} & Record that a learner does not want specific resources. They are never recommended to that learner again. \\
+\code{analyze\_resource\_content} & Deep analysis of one specific resource. Built for a per-resource ``What's inside?'' button; not currently used by the interface, but tested and ready. \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\subsection{Requirements of the calling system}
+
+\begin{enumerate}
+\item \textbf{Send a learner identifier.} Without one the engine cannot
+remember anything --- no history, no exclusions, and rejections fail outright.
+See Section 10.
+
+\item \textbf{Decide with the model, not a keyword list.} When a learner asks
+for different resources --- in any phrasing, in any language --- the
+Orchestrator's language model should recognise that and set the flag. This
+engine performs no language understanding on the user's intent, by design.
+
+\item \textbf{Show a loading state.} A first request on a new topic takes
+thirty to sixty seconds while the engine searches and verifies the live
+internet. Later requests on the same topic are answered from the catalogue and
+are fast.
+
+\item \textbf{Expect determinism.} The same learner asking the same question
+receives the same answer. Variety requires an explicit flag.
+\end{enumerate}
+
+\subsection{Output formatting}
+
+The text output is deliberately compact. An early version printed every
+chapter and section with its full paragraph summary --- an eight-section
+article buried the recommendations under a wall of text. The current format
+shows headings only, capped at five items, and for articles leads with the
+sections flagged as relevant to the learner's topic.
+
+% =====================================================================
+\newpage
+\section{Resilience}
+
+Every external dependency has a fallback that degrades honestly and explains
+itself. This was not a theoretical exercise --- the design was validated
+repeatedly by genuine infrastructure failures during development.
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Dependency} & \thead{When it fails} & \thead{What happens} \\
+\midrule
+Neural embeddings & Model cannot load & Falls back to bag-of-words similarity; prints which is active \\
+\rowcolor{altshade} PostgreSQL & Network, credentials, paused instance & Falls back to an in-memory catalogue; prints the real error \\
+Search engine & Blocked, unreachable, rate-limited & Returns no candidates; the request completes with an honest message \\
+\rowcolor{altshade} Gemini --- briefing & Outage, quota, unset key & Proceeds with unknown learner state and says so \\
+Gemini --- request & Outage, quota, unset key & Falls back to deterministic keyword matching \\
+\rowcolor{altshade} Either cache & Read or write fails & Proceeds without the cache \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\subsection{Layered, not merely present}
+
+The request extractor is the clearest example: cache first, then the API, then
+deterministic code. Each layer is cheaper and more reliable than the one
+before it, and each is genuinely useful on its own.
+
+\begin{callout}{Validated under real failure}
+During development the network became entirely unavailable twice --- once
+through TLS interception, once through blocked outbound database traffic. The
+Gemini API failed twice more, once from an exhausted daily quota and once from
+server overload.
+\par\vspace{4pt}
+In every case the engine continued to return recommendations, printed the
+precise cause of each degradation, and did not crash. Every fallback path was
+exercised in real conditions, unplanned.
+\end{callout}
+
+\textbf{The pattern throughout is the same:} an honest status message
+describing what could not be done, rather than a plausible-looking result that
+quietly hides a failure. The same discipline governs the ``not yet supported''
+responses for book-format resources, for playlists that have no single
+transcript, and for pages whose text cannot be extracted.
+
+% =====================================================================
+\newpage
+\section{The blocking integration issue}
+
+\begin{callout}{A learner identifier is never supplied}
+Every test through the integrated system extracts a null learner identifier.
+The briefing contains a name, university, field of study and education stage
+--- but nothing that identifies the learner to this engine.
+\end{callout}
+
+\textbf{The consequence is that the entire learner memory system does nothing
+in the live system.}
+
+\begin{itemize}
+\item Already-seen resources are not excluded.
+\item Rejections fail outright.
+\item ``Recommend something else'' returns the same results.
+\item Nothing is recorded between sessions.
+\end{itemize}
+
+This is the feature that most directly demonstrates the research question ---
+the difference between this engine and a stateless assistant --- and in the
+integrated system it is inert.
+
+\textbf{It cannot be fixed from inside this component.} The engine already
+accepts four different field names for the identifier and issues a warning
+when none is present. The calling system must include it.
+
+Everything else in this document describes work that is complete and tested.
+This one item is a conversation, not a code change, and it is the single
+highest-priority action.
+
+% =====================================================================
+\newpage
+\section{Known limitations}
+
+Stated plainly. Several are deliberate trade-offs rather than defects, but all
+are known and none are hidden.
+
+\subsection{Affecting recommendation quality}
+
+\begin{itemize}
+\item \textbf{Duration is never inferred.} Nothing determines whether a
+resource is short, medium, or long, so every resource forfeits twenty of one
+hundred points and realistic scores cap at eighty.
+
+\item \textbf{Quality is not a scoring factor.} Among resources that pass the
+topic gate, nothing distinguishes an excellent resource from a mediocre one
+--- no view counts, no reputation, no ratings. The trusted-domain list exists
+and is not yet wired into scoring; doing so is the most obvious available
+improvement.
+
+\item \textbf{Non-educational topics rank poorly.} A request for sport or
+gaming content extracts correctly, but most such content lives on blocked
+social domains, and with no quality signal every result scores low. The engine
+is tuned for educational topics; this is a scope boundary rather than a
+defect.
+
+\item \textbf{Score ties are broken arbitrarily.} The sort is stable, so the
+winner among equal scores is whichever was stored first --- not merit.
+\end{itemize}
+
+\subsection{Affecting reproducibility}
+
+\begin{itemize}
+\item \textbf{Prose extraction is not fully reproducible.} The same briefing
+may occasionally yield a different level or format. The recommendation
+decision remains fully deterministic given a learner state; it is the
+extraction step that varies. The cache removes this for inputs already seen.
+
+\item \textbf{Goal selection is a model judgment.} When the learner's profile
+holds several goals, the extractor picks the one presented as current. If the
+briefing exposed which goal is active, this could be deterministic instead.
+
+\item \textbf{Degraded mode is non-deterministic.} When the database is
+unreachable, discovery adds to the in-memory catalogue mid-session, so later
+requests see a different catalogue than earlier ones.
+\end{itemize}
+
+\subsection{Affecting data and maintenance}
+
+\begin{itemize}
+\item \textbf{The blocklist needs ongoing curation.} New categories of
+low-quality domain kept appearing throughout development, each found by
+inspecting real output rather than anticipated.
+
+\item \textbf{The blocklist uses substring matching.} Sufficient for filtering
+search results, insufficient against a determined actor. Proper URL host
+parsing would be the robust fix.
+
+\item \textbf{Cached analyses never expire.} If a video is re-uploaded or an
+article rewritten, stale content is served indefinitely. The timestamp needed
+for a staleness policy is stored, but no policy uses it.
+
+\item \textbf{Deleting a resource erases learner history for it,} including
+rejections. If it is later rediscovered, a learner who rejected it could see
+it again.
+
+\item \textbf{The keyword fallback is crude by design.} It handles common
+request shapes but would fail on a long conversational message. It only runs
+when the API is unavailable.
+\end{itemize}
+
+\subsection{Out of scope by decision}
+
+\textbf{Books are deliberately unsupported for content analysis.} Most books
+are copyrighted or paywalled with no legitimate full-text access. Rather than
+build something that appears to work but does not, book-format resources
+receive an explicit ``not yet supported'' message. This was a conscious
+decision, not an oversight.
+
+% =====================================================================
+\newpage
+\section{Development history}
+
+A record of genuine failures encountered and resolved. Kept because the
+reasoning is often more instructive than the fix, and because several
+represent traps that would otherwise be fallen into again.
+
+\subsection{Correctness}
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Problem} & \thead{Cause and resolution} \\
+\midrule
+Unearned scoring points & Discovery labelled every result with the format that had been searched for. A playlist, a social-media page and two documentation pages all claimed to be videos and collected thirty points each. Fixed by leaving format unknown at discovery and inferring conservatively from the URL, including path inspection to distinguish a single video from a playlist. \\
+\rowcolor{altshade} Off-topic resources returned & A calculus request returned all forty-seven machine learning resources. Two causes: the catch-all tier matched everything before internet discovery could run, and format-only matches scored thirty with no topic requirement. Fixed by restricting the catch-all and adding the topic gate. \\
+A site homepage recommended & A bare homepage scored fifty because its title contained a matching word. Fixed with a homepage gate in the verifier. \\
+\rowcolor{altshade} Subject names destroyed & The keyword fallback stripped ``learning'' as a filler word, turning ``machine learning'' into ``machine'' --- and the engine recommended a sewing machine tutorial. Fixed by removing those words from the filler list. \\
+A filler word became the topic & ``Recommend something for me'' produced the topic ``for'', and the engine searched the web for it. Fixed by excluding marker words from the extracted topic. \\
+\rowcolor{altshade} Twenty-six recommendations returned & The first tier returns everything matching, and the catalogue grows every run. Worse, all twenty-six were recorded as shown, wrongly excluding twenty-one good resources from every future request. Fixed by capping the list before recording history. \\
+Verified work discarded & Surplus resources that had each cost a real network request were thrown away, forcing rediscovery later. Fixed by saving everything verified and returning only what the request needs. \\
+\bottomrule
+\end{tabularx}
+
+\subsection{Environment and tooling}
+
+\vspace{4pt}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4cm} >{\raggedright\arraybackslash}X}
+\headrow \thead{Problem} & \thead{Cause and resolution} \\
+\midrule
+Silent loss of neural embeddings & A bad import inside a function body fired only when the function was called, producing a misleading ``module not found'' message and a silent fallback to the weaker similarity method for days. Found by listing every import in the project. \\
+\rowcolor{altshade} Files documented but absent & Several functions and one entire module were described as complete but were not on disk. Documentation had drifted from reality; the filesystem is the authority. \\
+Three distinct network failures & On the same connection: TLS interception broke all HTTPS; the database host resolved to an unroutable address family; and outbound database traffic was blocked entirely. None were code faults. Certificate verification was deliberately not disabled --- for a system whose purpose is verifying resources, that would be the wrong trade. \\
+\rowcolor{altshade} API quota and outages & The free tier allows twenty requests per day per model, and each recommendation makes up to four calls --- roughly five test runs. The service also returned overload errors independently. This directly motivated the extraction cache and the keyword fallback. \\
+Environment variables lost repeatedly & Session-scoped variables vanish when a terminal closes, and an unset database host silently defaulted to the local machine, making a configuration problem look like an outage. Two further traps: putting the project reference in the database name rather than the username, and an invisible newline stored inside a value. \\
+\bottomrule
+\end{tabularx}
+\vspace{8pt}
+
+\textbf{A recurring theme:} the most costly bugs were not crashes. They were
+silent --- a resource collecting points it had not earned, a subject name
+quietly truncated, a documented file that did not exist, a configuration value
+with an invisible character. Each was found by inspecting output that the
+system had been built to expose.
+
+% =====================================================================
+\newpage
+\section{Outstanding work}
+
+\subsection{Immediate}
+
+\begin{enumerate}
+\item \textbf{Resolve the learner identifier} with the Orchestrator developer.
+Nothing else matters as much --- see Section 10.
+\item \textbf{Verify end-to-end persistence} on an unrestricted network:
+discover, save, restart, and confirm the resources are still there.
+\item \textbf{Create a shared dependency list} for the whole project. Packages
+are currently installed one at a time as errors appear, and every team member
+hits the same wall.
+\end{enumerate}
+
+\subsection{Short-term improvements, in value order}
+
+\begin{enumerate}
+\item \textbf{Wire the trusted-domain list into scoring} as a quality signal
+and a tiebreaker between the many resources that currently score identically.
+The single biggest available improvement to recommendation quality.
+\item \textbf{Infer duration} from video length or estimated reading time ---
+recovers twenty points currently forfeited on every resource.
+\item \textbf{Continue curating the blocklist} as new categories of
+low-quality domain appear.
+\end{enumerate}
+
+\subsection{Discussed but not built}
+
+\begin{enumerate}
+\item \textbf{Blended recommendations.} After the requested topic, add two or
+three resources relevant to the learner's stored goal, clearly labelled. The
+ambitious version --- recommending linear algebra because it supports machine
+learning --- needs prerequisite knowledge the engine does not have. The
+simpler version needs no new knowledge and would work today.
+\item \textbf{An intermittent interface failure} was reported but never
+diagnosed, because the failure output was never captured. Most likely a
+timeout on the slow first request, but this is unconfirmed.
+\end{enumerate}
+
+\subsection{Longer-term, dependent on other teams}
+
+\begin{enumerate}
+\item \textbf{Real Digital Twin integration.} The learner model stores goals
+and preferences as collections of objects; this engine expects single values.
+The bridging responsibility must be agreed before integration rather than
+discovered during it.
+\item \textbf{Knowledge graph integration.} Would allow retrieval to broaden
+into prerequisite and adjacent concepts rather than falling straight through
+to a web search. Currently blocked: the graph is not persisted between runs
+and mastery values are never populated.
+\item \textbf{Emit rejection signals upstream.} When a learner rejects
+resources, that is real evidence about their preferences. The engine's history
+table drives filtering; a memory record could carry the signal to the learner
+model, which might conclude the format or level is wrong.
+\end{enumerate}
+
+% =====================================================================
+\newpage
+\section{Design principles}
+
+Extracted from decisions that proved correct under real use. If this component
+is continued or reimplemented, these are the rules that kept it honest.
+
+\principle{Never claim what you have not verified}{The format bug awarded
+thirty points for an assumption. Every field is now either known and correct,
+or explicitly unknown. Unknown scores zero, which is the honest outcome ---
+and a resource scoring fifty truthfully is more useful than one scoring eighty
+on a guess.}
+
+\principle{A wrong answer is worse than no answer}{The topic gate and the
+quality floor both exist because returning something plausible but irrelevant
+wastes the learner's time and makes the engine look careless. But never return
+nothing when something exists --- say plainly that the matches are weak.}
+
+\principle{Make invalid states structurally impossible}{A composite primary
+key means a learner cannot be both shown and rejected the same resource. A
+uniqueness constraint means duplicates cannot accumulate. Rules enforced by
+the database survive buggy code, other people's scripts, and manual edits.}
+
+\principle{Degrade honestly, never crash}{Every external dependency has a
+fallback that explains itself. Validated repeatedly by real network, database
+and API failures --- the engine kept working and said precisely what was
+wrong.}
+
+\principle{Layer the fallbacks}{Cache, then API, then deterministic code. Each
+layer is cheaper and more reliable than the one before it, and each is
+genuinely useful on its own rather than being a token gesture.}
+
+\principle{Cheapest checks first}{Structural, blocklist and homepage checks
+run before any network request. Cache lookups run before any API call. Work
+that can be avoided should be avoided before it is paid for.}
+
+\principle{Pay once, share the result}{Verified resources and cached analyses
+are stored in shared tables. Work done for one learner benefits every learner,
+and the catalogue grows more valuable with use.}
+
+\principle{Reproducibility is a feature, not a constraint}{The same input
+produces the same output, so a recommendation can be explained, audited, and
+defended. Variety is available on request --- never by accident.}
+
+\principle{Documentation drifts; the filesystem does not}{Several files this
+project's own notes described as complete were not on disk. Verify against
+reality before building on an assumption.}
+
+\principle{Say when you do not know}{Several bugs were diagnosed only after
+asking for the actual output rather than reasoning from a description of it. A
+confident guess is worse than an admitted gap.}
+
+\end{document}
